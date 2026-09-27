@@ -5,6 +5,7 @@ const path = require("path");
 const fetch = require("node-fetch");
 const { buildSystemPrompt } = require("./systemPrompt");
 const { buildDocx } = require("./buildDocx");
+const { ALLOWED_EMAILS } = require("./allowedEmails");
 
 const app = express();
 app.use(cors());
@@ -12,8 +13,35 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 const GEMINI_MODEL = "gemini-3.8-flash";
-
 const COLLEGE_NAME = "ТАРАЗ ИННОВАЦИЯЛЫҚ КӨПСАЛАЛЫ КОЛЛЕДЖІ";
+const GOOGLE_CLIENT_ID =
+  "1056990394829-p54m601t1j6p63r1fqfh9i3hv0q042ht.apps.googleusercontent.com";
+
+// Google-дан келген id_token шынайы ма, тексереді және email-ді қайтарады
+async function verifyGoogleToken(idToken) {
+  if (!idToken) throw new Error("Кіру керек (Google арқылы).");
+
+  const resp = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+  );
+  if (!resp.ok) throw new Error("Google токенін тексеру сәтсіз аяқталды.");
+
+  const payload = await resp.json();
+
+  if (payload.aud !== GOOGLE_CLIENT_ID) {
+    throw new Error("Токен басқа қосымшаға арналған.");
+  }
+  if (payload.email_verified !== "true" && payload.email_verified !== true) {
+    throw new Error("Email расталмаған.");
+  }
+
+  const email = payload.email.toLowerCase();
+  if (!ALLOWED_EMAILS.map((e) => e.toLowerCase()).includes(email)) {
+    throw new Error("Бұл email-ге рұқсат жоқ. Әкімшіге хабарласыңыз.");
+  }
+
+  return email;
+}
 
 // Достаём чистый JSON из ответа модели (на случай если она обернёт в ```json ... ```)
 function extractJson(text) {
@@ -61,6 +89,9 @@ async function callGemini({ subject, topic, pages }) {
 
 app.post("/api/generate", async (req, res) => {
   try {
+    // Алдымен кіру құқығын тексереміз
+    await verifyGoogleToken(req.body.idToken);
+
     const {
       topic,
       subject,
