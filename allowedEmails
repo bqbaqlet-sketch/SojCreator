@@ -1,0 +1,6 @@
+const ALLOWED_EMAILS = [
+  "example1@gmail.com",
+  "example2@gmail.com",
+];
+
+module.exports = { ALLOWED_EMAILS };
