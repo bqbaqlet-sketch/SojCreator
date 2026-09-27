@@ -1,0 +1,17 @@
+{
+  "name": "soj-generator",
+  "version": "1.0.0",
+  "description": "Сайт для автоматической генерации СӨЖ (рефератов) в формате .docx на казахском языке через Gemini API",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "docx": "^9.0.2",
+    "dotenv": "^16.4.5",
+    "node-fetch": "^2.7.0",
+    "cors": "^2.8.5"
+  }
+}

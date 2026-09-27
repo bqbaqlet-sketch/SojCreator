@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>СӨЖ генераторы — ТИКК</title>
+<style>
+  :root {
+    --blue: #1a3fd6;
+    --orange: #ff7a1a;
+    --bg: #f5f6fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .card {
+    background: #fff;
+    max-width: 520px;
+    width: 100%;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(26,63,214,0.12);
+    padding: 32px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+    color: var(--blue);
+  }
+  p.sub {
+    margin: 0 0 24px;
+    color: #666;
+    font-size: 14px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 14px 0 6px;
+    color: #333;
+  }
+  input, select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+  button {
+    margin-top: 24px;
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--blue), var(--orange));
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  #status {
+    margin-top: 14px;
+    font-size: 13px;
+    text-align: center;
+  }
+  #status.error { color: #d33; }
+  #status.ok { color: #1a8f3c; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>СӨЖ генераторы</h1>
+    <p class="sub">Тақырыпты, аты-жөніңізді және топты енгізіңіз — .docx файл автоматты дайын болады.</p>
+
+    <form id="form">
+      <label>Тақырыбы *</label>
+      <input name="topic" required placeholder="Мысалы: Шыңғысханның әлемдік тарихтағы рөлі" />
+
+      <label>Пәні</label>
+      <input name="subject" placeholder="Мысалы: Қазақстан тарихы" />
+
+      <label>Студент (аты-жөні) *</label>
+      <input name="student" required placeholder="Жарылқасын Еркежан" />
+
+      <label>Оқытушы</label>
+      <input name="teacher" placeholder="Есенаманова Айдана" />
+
+      <label>Курс</label>
+      <input name="course" placeholder="1" />
+
+      <label>Топ *</label>
+      <input name="group" required placeholder="ТБ-9-25-1" />
+
+      <label>Беттер саны</label>
+      <select name="pages">
+        <option value="2">2 бет</option>
+        <option value="3" selected>3 бет</option>
+        <option value="5">5 бет</option>
+        <option value="8">8 бет</option>
+        <option value="12">12 бет</option>
+      </select>
+
+      <button type="submit" id="submitBtn">Құжатты жасау</button>
+      <div id="status"></div>
+    </form>
+  </div>
+
+<script>
+const form = document.getElementById('form');
+const status = document.getElementById('status');
+const btn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  status.textContent = '';
+  status.className = '';
+  btn.disabled = true;
+  btn.textContent = 'Жасалуда... (10-30 сек)';
+
+  const data = Object.fromEntries(new FormData(form).entries());
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || 'Қате шықты');
+    }
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'SOJ.docx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    status.textContent = 'Дайын! Файл жүктелді.';
+    status.className = 'ok';
+  } catch (err) {
+    status.textContent = err.message;
+    status.className = 'error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Құжатты жасау';
+  }
+});
+</script>
+</body>
+</html>
