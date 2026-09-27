@@ -171,6 +171,9 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
         spacing: { after: 60 },
       })
     );
+    children.push(
+      new Paragraph({ children: [], spacing: { after: 60 } })
+    );
   });
 
   children.push(new Paragraph({ children: [], pageBreakBefore: false }));
@@ -209,10 +212,17 @@ function sectionHeading(text) {
 }
 
 function bodyParagraphs(text) {
-  return text
+  const paragraphs = text
     .split(/\n+/)
-    .filter((p) => p.trim().length > 0)
-    .map((p) => para(run(p.trim(), { size: SZ.body, bold: true })));
+    .filter((p) => p.trim().length > 0);
+
+  const result = [];
+  paragraphs.forEach((p) => {
+    result.push(para(run(p.trim(), { size: SZ.body, bold: true })));
+    // Абзацтар арасында көрінетін бос орын болу үшін
+    result.push(new Paragraph({ children: [], spacing: { after: 60 } }));
+  });
+  return result;
 }
 
 async function buildDocx(content, meta) {
