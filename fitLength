@@ -1,14 +1,6 @@
-// Бөлімдердің көлемін Word беттеріне сай ұстап тұру.
+// Бөлімдердің көлемін таңдалған үлгіге (plans.js) сай ұстап тұру.
 // Өлшеу нәтижесі (Times New Roman 12 pt, жирный, бір интервал, A4):
-//   1 бет  ≈ 420 сөз  -> Кіріспе
-//   1.5 бет ≈ 590 сөз -> Негізгі бөлім (3 ішкі тақырыпшамен)
-
-const LIMITS = {
-  kirispeMax: 415, // 420-дан асса келесі бетке өтіп кетеді
-  kirispeMin: 340, // бұдан аз болса қайта жасатамыз
-  negizgiMax: 630,
-  negizgiMin: 500,
-};
+//   1 бет ≈ 420 сөз.
 
 function countWords(text) {
   return (text || "").split(/\s+/).filter(Boolean).length;
@@ -48,30 +40,44 @@ function negizgiWords(blocks) {
   return (blocks || []).reduce((sum, b) => sum + countWords(b.matin), 0);
 }
 
+// Үлгіден шектерді есептейді
+function limitsFor(plan) {
+  return {
+    kirispeMax: Math.round(plan.kirispe * 1.035), // 400 -> 414
+    kirispeMin: Math.round(plan.kirispe * 0.85),
+    negizgiMax: Math.round(plan.negizgi * 1.07), // 590 -> 631
+    negizgiMin: Math.round(plan.negizgi * 0.85),
+  };
+}
+
 // Мәтін тым қысқа болса true
-function isTooShort(content) {
+function isTooShort(content, plan) {
+  const L = limitsFor(plan);
   return (
-    countWords(content.kirispe) < LIMITS.kirispeMin ||
-    negizgiWords(content.negizgi_bolim) < LIMITS.negizgiMin
+    countWords(content.kirispe) < L.kirispeMin ||
+    negizgiWords(content.negizgi_bolim) < L.negizgiMin
   );
 }
 
-// Тым ұзын болса — қысқартады
-function fitContent(content) {
+// Тым ұзын болса — толық сөйлемдермен қысқартады
+function fitContent(content, plan) {
+  const L = limitsFor(plan);
   const fitted = { ...content };
-  fitted.kirispe = trimText(content.kirispe || "", LIMITS.kirispeMax);
+  fitted.kirispe = trimText(content.kirispe || "", L.kirispeMax);
 
   // Артық болса, барлық ішкі бөлімдерді пропорционалды қысқартамыз,
-  // сонда 3 тақырыпшаның үшеуі де қалады
+  // сонда барлық тақырыпшалар қалады
   const src = content.negizgi_bolim || [];
   const total = negizgiWords(src);
-  const ratio = total > LIMITS.negizgiMax ? LIMITS.negizgiMax / total : 1;
-  const blocks = src.map((b) => ({
+  const ratio = total > L.negizgiMax ? L.negizgiMax / total : 1;
+  fitted.negizgi_bolim = src.map((b) => ({
     ...b,
     matin: trimText(b.matin || "", Math.floor(countWords(b.matin) * ratio)),
   }));
-  fitted.negizgi_bolim = blocks;
+
+  // Қорытынды тым ұзақ болмасын (+15%)
+  fitted.qorytyndy = trimText(content.qorytyndy || "", Math.round(plan.qorytyndy * 1.15));
   return fitted;
 }
 
-module.exports = { fitContent, isTooShort, countWords, LIMITS };
+module.exports = { fitContent, isTooShort, countWords, limitsFor };
