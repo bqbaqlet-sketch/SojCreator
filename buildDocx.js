@@ -37,6 +37,7 @@ function para(children, opts = {}) {
   return new Paragraph({
     alignment: opts.alignment ?? AlignmentType.JUSTIFIED,
     pageBreakBefore: opts.pageBreakBefore ?? false,
+    keepNext: opts.keepNext ?? false,
     spacing: { before: 0, after: 0, ...(opts.spacing || {}) },
     children: Array.isArray(children) ? children : [children],
   });
@@ -196,6 +197,7 @@ function planPage() {
 function sectionHeading(text, opts = {}) {
   return para(run(text, { size: SZ.h3 }), {
     alignment: AlignmentType.CENTER,
+    keepNext: true,
     ...opts,
   });
 }
@@ -223,12 +225,15 @@ async function buildDocx(content, meta) {
   bodyChildren.push(...bodyParagraphs(content.kirispe || ""));
 
   // Негізгі бөлім
-  bodyChildren.push(sectionHeading("НЕГІЗГІ БӨЛІМ", { pageBreakBefore: true }));
+  bodyChildren.push(
+    sectionHeading("НЕГІЗГІ БӨЛІМ", { pageBreakBefore: !!meta.pageBreakBeforeNegizgi })
+  );
   (content.negizgi_bolim || []).forEach((block) => {
     if (block.takyrypsha) {
       bodyChildren.push(
         para(run(block.takyrypsha, { size: SZ.h2 }), {
           alignment: AlignmentType.LEFT,
+          keepNext: true,
         })
       );
     }
