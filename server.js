@@ -16,6 +16,8 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Бірінші модель — негізгі, келесілері — қосалқы (негізгісі жүктелген болса ауысады).
 // Керек болса Render-де GEMINI_MODELS айнымалысымен өзгертуге болады: "модель1,модель2"
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
 const MODELS = (process.env.GEMINI_MODELS || "gemini-3.8-flash,gemini-3.7-flash")
   .split(",")
   .map((m) => m.trim())
@@ -71,6 +73,39 @@ function extractJson(text) {
 const TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || "90000", 10);
 const COOLDOWN_MS = parseInt(process.env.GEMINI_COOLDOWN_MS || "180000", 10);
 const cooldownUntil = {}; // модель -> қашанға дейін "демалады" (уақыт белгісі)
+
+// Groq (басқа компания) — барлық Gemini модельдері өтпей қалса, соңғы амал ретінде
+async function requestGroq(prompt) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return { ok: false, status: "no-key", raw: "GROQ_API_KEY орнатылмаған", ms: 0 };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const t0 = Date.now();
+  try {
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    const raw = await resp.text();
+    return { ok: resp.ok, status: resp.status, raw, ms: Date.now() - t0 };
+  } catch (e) {
+    const timedOut = e.name === "AbortError";
+    return { ok: false, status: timedOut ? "timeout" : "network", raw: e.message, ms: Date.now() - t0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function requestModel(model, apiKey, prompt) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -179,6 +214,19 @@ async function callGemini({ subject, topic, plan }) {
     break;
   }
 
+  // Barлық Gemini модельдері өтпесе, соңғы амал ретінде Groq-қа сұраймыз
+  if (!okResult) {
+    console.log(`Барлық Gemini модельдері өтпеді, Groq-қа (${GROQ_MODEL}) ауысамын...`);
+    const g = await requestGroq(prompt);
+    console.log(`⏱ groq/${GROQ_MODEL}: ${g.status} — ${(g.ms / 1000).toFixed(1)} с`);
+
+    if (g.ok) {
+      okResult = { model: `groq/${GROQ_MODEL}`, raw: g.raw, provider: "groq" };
+    } else if (g.status !== "no-key") {
+      console.error(`groq/${GROQ_MODEL}: ${g.status}: ${String(g.raw).slice(0, 300)}`);
+    }
+  }
+
   if (!okResult) {
     const { model, status, msg } = lastFail;
     if (status === 429) {
@@ -189,18 +237,25 @@ async function callGemini({ subject, topic, plan }) {
     }
     if (RETRY_STATUSES.includes(status) || status === "network") {
       throw new Error(
-        `Gemini қазір жауап бермеді (${status}, ${model}). Бір-екі минуттан кейін қайталап көріңіз. Google айтуы: ${msg}`
+        `Gemini және қосалқы қызмет (Groq) қазір жауап бермеді (${status}, ${model}). Бір-екі минуттан кейін қайталап көріңіз. Google айтуы: ${msg}`
       );
     }
     throw new Error(`Gemini API қатесі (${status}, ${model}): ${msg}`);
   }
 
+  // Groq мен Gemini жауап пішіні әртүрлі, соған қарай мәтінді аламыз
   const data = JSON.parse(okResult.raw);
-  const candidate = data?.candidates?.[0];
-  const text = candidate?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini бос жауап қайтарды");
-  if (candidate?.finishReason === "MAX_TOKENS") {
-    throw new Error("Жауап үзіліп қалды. Қайтадан көріңіз.");
+  let text;
+  if (okResult.provider === "groq") {
+    text = data?.choices?.[0]?.message?.content;
+    if (!text) throw new Error("Groq бос жауап қайтарды");
+  } else {
+    const candidate = data?.candidates?.[0];
+    text = candidate?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Gemini бос жауап қайтарды");
+    if (candidate?.finishReason === "MAX_TOKENS") {
+      throw new Error("Жауап үзіліп қалды. Қайтадан көріңіз.");
+    }
   }
 
   return extractJson(text);
