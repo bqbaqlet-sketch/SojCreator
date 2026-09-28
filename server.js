@@ -16,7 +16,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Бірінші модель — негізгі, келесілері — қосалқы (негізгісі жүктелген болса ауысады).
 // Керек болса Render-де GEMINI_MODELS айнымалысымен өзгертуге болады: "модель1,модель2"
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
 const MODELS = (process.env.GEMINI_MODELS || "gemini-3.8-flash,gemini-3.7-flash")
   .split(",")
