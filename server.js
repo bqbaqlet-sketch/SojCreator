@@ -24,27 +24,35 @@ const COLLEGE_NAME = "ТАРАЗ ИННОВАЦИЯЛЫҚ КӨПСАЛАЛЫ К�
 const GOOGLE_CLIENT_ID =
   "1056990394829-p54m601t1j6p63r1fqfh9i3hv0q042ht.apps.googleusercontent.com";
 
+// Қатеге код қосамыз: NOT_ALLOWED (тізімде жоқ) / INVALID_TOKEN (токен жарамсыз)
+function authError(message, code, extra = {}) {
+  const e = new Error(message);
+  e.code = code;
+  Object.assign(e, extra);
+  return e;
+}
+
 // Google-дан келген id_token шынайы ма, тексереді және email-ді қайтарады
 async function verifyGoogleToken(idToken) {
-  if (!idToken) throw new Error("Кіру керек (Google арқылы).");
+  if (!idToken) throw authError("Кіру керек (Google арқылы).", "INVALID_TOKEN");
 
   const resp = await fetch(
     `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
   );
-  if (!resp.ok) throw new Error("Google токенін тексеру сәтсіз аяқталды.");
+  if (!resp.ok) throw authError("Кіру мерзімі аяқталды. Қайтадан кіріңіз.", "INVALID_TOKEN");
 
   const payload = await resp.json();
 
   if (payload.aud !== GOOGLE_CLIENT_ID) {
-    throw new Error("Токен басқа қосымшаға арналған.");
+    throw authError("Токен басқа қосымшаға арналған.", "INVALID_TOKEN");
   }
   if (payload.email_verified !== "true" && payload.email_verified !== true) {
-    throw new Error("Email расталмаған.");
+    throw authError("Email расталмаған.", "INVALID_TOKEN");
   }
 
   const email = payload.email.toLowerCase();
   if (!ALLOWED_EMAILS.map((e) => e.toLowerCase()).includes(email)) {
-    throw new Error("Бұл email-ге рұқсат жоқ. Әкімшіге хабарласыңыз.");
+    throw authError("Бұл email-ге рұқсат жоқ.", "NOT_ALLOWED", { email });
   }
 
   return email;
@@ -153,6 +161,19 @@ async function callGemini({ subject, topic, plan }) {
   return extractJson(text);
 }
 
+// Google арқылы кіргеннен кейін бірден рұқсатты тексереді
+app.post("/api/check-access", async (req, res) => {
+  try {
+    const email = await verifyGoogleToken(req.body.idToken);
+    res.json({ allowed: true, email });
+  } catch (err) {
+    if (err.code === "NOT_ALLOWED") {
+      return res.status(403).json({ allowed: false, error: err.message, email: err.email });
+    }
+    res.status(401).json({ allowed: false, error: err.message || "Кіру қатесі" });
+  }
+});
+
 app.post("/api/generate", async (req, res) => {
   try {
     // Алдымен кіру құқығын тексереміз
@@ -205,7 +226,8 @@ app.post("/api/generate", async (req, res) => {
     res.send(buffer);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message || "Белгісіз қате" });
+    const status = err.code === "NOT_ALLOWED" ? 403 : err.code === "INVALID_TOKEN" ? 401 : 500;
+    res.status(status).json({ error: err.message || "Белгісіз қате", email: err.email });
   }
 });
 
