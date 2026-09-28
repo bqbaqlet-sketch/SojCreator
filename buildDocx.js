@@ -223,7 +223,7 @@ async function buildDocx(content, meta) {
   bodyChildren.push(...bodyParagraphs(content.kirispe || ""));
 
   // Негізгі бөлім
-  bodyChildren.push(sectionHeading("НЕГІЗГІ БӨЛІМ"));
+  bodyChildren.push(sectionHeading("НЕГІЗГІ БӨЛІМ", { pageBreakBefore: true }));
   (content.negizgi_bolim || []).forEach((block) => {
     if (block.takyrypsha) {
       bodyChildren.push(
