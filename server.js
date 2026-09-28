@@ -7,6 +7,7 @@ const { buildSystemPrompt } = require("./systemPrompt");
 const { buildDocx } = require("./buildDocx");
 const { ALLOWED_EMAILS } = require("./allowedEmails");
 const { fitContent, isTooShort } = require("./fitLength");
+const { getPlan } = require("./plans");
 
 const app = express();
 app.use(cors());
@@ -53,7 +54,7 @@ function extractJson(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-async function callGemini({ subject, topic, pages }) {
+async function callGemini({ subject, topic, plan }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -61,7 +62,7 @@ async function callGemini({ subject, topic, pages }) {
     );
   }
 
-  const prompt = buildSystemPrompt({ subject, topic, pages });
+  const prompt = buildSystemPrompt({ subject, topic, plan });
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   // Gemini аса жүктелген кезде (503/429/500) бірнеше рет қайталап көреміз
@@ -78,6 +79,7 @@ async function callGemini({ subject, topic, pages }) {
         generationConfig: {
           temperature: 0.7,
           responseMimeType: "application/json",
+          maxOutputTokens: 32768, // ұзын жұмыстарға жеткілікті (модель шегі 65536)
         },
       }),
     });
@@ -100,8 +102,12 @@ async function callGemini({ subject, topic, pages }) {
   }
 
   const data = await resp.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const candidate = data?.candidates?.[0];
+  const text = candidate?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini бос жауап қайтарды");
+  if (candidate?.finishReason === "MAX_TOKENS") {
+    throw new Error("Жауап тым ұзын болып, үзіліп қалды. Аз беттік нұсқаны таңдап көріңіз.");
+  }
 
   return extractJson(text);
 }
@@ -125,27 +131,30 @@ app.post("/api/generate", async (req, res) => {
       return res.status(400).json({ error: "Тақырып, аты-жөні және топ міндетті түрде толтырылуы керек." });
     }
 
+    const plan = getPlan(pages);
+
     let content = await callGemini({
       subject: subject || "Пән",
       topic,
-      pages: pages || 3,
+      plan,
     });
 
-    // Мәтін тым қысқа шықса, бір рет қайта жасатамыз
-    if (isTooShort(content)) {
+    // Стандарт үлгіде мәтін тым қысқа шықса, бір рет қайта жасатамыз
+    // (ұзын жұмыстарда уақытты үнемдеу үшін қайталамаймыз)
+    if (plan === getPlan("standard") && isTooShort(content, plan)) {
       try {
         content = await callGemini({
           subject: subject || "Пән",
           topic,
-          pages: pages || 3,
+          plan,
         });
       } catch (e) {
         console.log("Қайта жасау сәтсіз, бірінші нұсқа қолданылады:", e.message);
       }
     }
 
-    // Тым ұзын болса — толық сөйлемдермен қысқартамыз (Кіріспе = 1 бет, Негізгі = 1.5 бет)
-    content = fitContent(content);
+    // Тым ұзын болса — толық сөйлемдермен қысқартамыз
+    content = fitContent(content, plan);
 
     const buffer = await buildDocx(content, {
       college: COLLEGE_NAME,
@@ -155,6 +164,7 @@ app.post("/api/generate", async (req, res) => {
       group,
       student,
       teacher: teacher || "-",
+      pageBreakBeforeNegizgi: plan.pageBreakBeforeNegizgi,
     });
 
     res.setHeader(
