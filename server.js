@@ -6,6 +6,7 @@ const fetch = require("node-fetch");
 const { buildSystemPrompt } = require("./systemPrompt");
 const { buildDocx } = require("./buildDocx");
 const { ALLOWED_EMAILS } = require("./allowedEmails");
+const { fitContent, isTooShort } = require("./fitLength");
 
 const app = express();
 app.use(cors());
@@ -124,11 +125,27 @@ app.post("/api/generate", async (req, res) => {
       return res.status(400).json({ error: "Тақырып, аты-жөні және топ міндетті түрде толтырылуы керек." });
     }
 
-    const content = await callGemini({
+    let content = await callGemini({
       subject: subject || "Пән",
       topic,
       pages: pages || 3,
     });
+
+    // Мәтін тым қысқа шықса, бір рет қайта жасатамыз
+    if (isTooShort(content)) {
+      try {
+        content = await callGemini({
+          subject: subject || "Пән",
+          topic,
+          pages: pages || 3,
+        });
+      } catch (e) {
+        console.log("Қайта жасау сәтсіз, бірінші нұсқа қолданылады:", e.message);
+      }
+    }
+
+    // Тым ұзын болса — толық сөйлемдермен қысқартамыз (Кіріспе = 1 бет, Негізгі = 1.5 бет)
+    content = fitContent(content);
 
     const buffer = await buildDocx(content, {
       college: COLLEGE_NAME,
