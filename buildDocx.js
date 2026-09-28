@@ -36,7 +36,8 @@ function run(text, opts = {}) {
 function para(children, opts = {}) {
   return new Paragraph({
     alignment: opts.alignment ?? AlignmentType.JUSTIFIED,
-    spacing: { after: 120, line: 360, ...(opts.spacing || {}) },
+    pageBreakBefore: opts.pageBreakBefore ?? false,
+    spacing: { before: 0, after: 0, ...(opts.spacing || {}) },
     children: Array.isArray(children) ? children : [children],
   });
 }
@@ -72,7 +73,6 @@ function headerTable(group) {
             children: [
               para(run("Студенттің өзіндік жұмысы", { bold: false, size: 20 }), {
                 alignment: AlignmentType.LEFT,
-                spacing: { after: 0 },
               }),
             ],
           }),
@@ -83,11 +83,9 @@ function headerTable(group) {
             children: [
               para(run(group, { bold: false, size: 20 }), {
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 0 },
               }),
               para(run(dateStr, { bold: false, size: 20 }), {
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 0 },
               }),
             ],
           }),
@@ -123,7 +121,6 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
   children.push(
     para(run(`«${college}»`, { size: SZ.h2 }), {
       alignment: AlignmentType.CENTER,
-      spacing: { after: 300 },
     })
   );
 
@@ -131,7 +128,6 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 300 },
         children: [
           new ImageRun({
             data: logoBuffer,
@@ -146,14 +142,13 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
   children.push(
     para(run("СӨЖ", { size: SZ.title }), {
       alignment: AlignmentType.CENTER,
-      spacing: { after: 500 },
     })
   );
 
   children.push(
     para(
       [run("Тақырыбы: ", { size: SZ.body }), run(topic, { size: SZ.body })],
-      { alignment: AlignmentType.LEFT, spacing: { after: 400 } }
+      { alignment: AlignmentType.LEFT }
     )
   );
 
@@ -168,15 +163,10 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
     children.push(
       para(run(line, { size: SZ.body, bold: false }), {
         alignment: AlignmentType.LEFT,
-        spacing: { after: 60 },
       })
-    );
-    children.push(
-      new Paragraph({ children: [], spacing: { after: 60 } })
     );
   });
 
-  children.push(new Paragraph({ children: [], pageBreakBefore: false }));
   return children;
 }
 
@@ -190,39 +180,31 @@ function planPage() {
   const children = [
     para(run("ЖОСПАР", { size: SZ.h3 }), {
       alignment: AlignmentType.CENTER,
-      spacing: { after: 300 },
+      pageBreakBefore: true,
     }),
   ];
   items.forEach((it) => {
     children.push(
       para(run(it, { size: SZ.body }), {
         alignment: AlignmentType.LEFT,
-        spacing: { after: 150 },
       })
     );
   });
   return children;
 }
 
-function sectionHeading(text) {
+function sectionHeading(text, opts = {}) {
   return para(run(text, { size: SZ.h3 }), {
     alignment: AlignmentType.CENTER,
-    spacing: { before: 300, after: 200 },
+    ...opts,
   });
 }
 
 function bodyParagraphs(text) {
-  const paragraphs = text
+  return text
     .split(/\n+/)
-    .filter((p) => p.trim().length > 0);
-
-  const result = [];
-  paragraphs.forEach((p) => {
-    result.push(para(run(p.trim(), { size: SZ.body, bold: true })));
-    // Абзацтар арасында көрінетін бос орын болу үшін
-    result.push(new Paragraph({ children: [], spacing: { after: 60 } }));
-  });
-  return result;
+    .filter((p) => p.trim().length > 0)
+    .map((p) => para(run(p.trim(), { size: SZ.body, bold: true })));
 }
 
 async function buildDocx(content, meta) {
@@ -234,14 +216,10 @@ async function buildDocx(content, meta) {
   bodyChildren.push(...titlePage({ college, topic, subject, course, group, student, teacher }));
 
   // План (с разрывом страницы)
-  bodyChildren.push(
-    new Paragraph({ children: [], pageBreakBefore: true })
-  );
   bodyChildren.push(...planPage());
 
   // Кіріспе
-  bodyChildren.push(new Paragraph({ children: [], pageBreakBefore: true }));
-  bodyChildren.push(sectionHeading("КІРІСПЕ"));
+  bodyChildren.push(sectionHeading("КІРІСПЕ", { pageBreakBefore: true }));
   bodyChildren.push(...bodyParagraphs(content.kirispe || ""));
 
   // Негізгі бөлім
@@ -251,7 +229,6 @@ async function buildDocx(content, meta) {
       bodyChildren.push(
         para(run(block.takyrypsha, { size: SZ.h2 }), {
           alignment: AlignmentType.LEFT,
-          spacing: { before: 200, after: 150 },
         })
       );
     }
@@ -268,7 +245,6 @@ async function buildDocx(content, meta) {
     bodyChildren.push(
       para(run(ref, { size: SZ.body }), {
         alignment: AlignmentType.LEFT,
-        spacing: { after: 120 },
       })
     );
   });
