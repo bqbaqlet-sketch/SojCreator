@@ -101,7 +101,7 @@
       <input name="subject" placeholder="Мысалы: Қазақстан тарихы" />
 
       <label>Студент (аты-жөні) *</label>
-      <input name="student" required placeholder="Жарылқасын Еркежан" />
+      <input name="student" required placeholder="Ошақбай Бақәулет" />
 
       <label>Оқытушы</label>
       <input name="teacher" placeholder="Есенаманова Айдана" />
@@ -111,13 +111,6 @@
 
       <label>Топ *</label>
       <input name="group" required placeholder="ТБ-9-25-1" />
-
-      <label>Беттер саны</label>
-      <select name="pages">
-        <option value="standard" selected>Стандарт (Кіріспе — 1 бет, Негізгі бөлім — 1,5 бет)</option>
-        <option value="7">≈ 7 бет</option>
-        <option value="10">≈ 10 бет</option>
-      </select>
 
       <button type="submit" id="submitBtn">Құжатты жасау</button>
       <div id="status"></div>
@@ -163,7 +156,7 @@ form.addEventListener('submit', async (e) => {
   }
 
   btn.disabled = true;
-  btn.textContent = 'Жасалуда... (ұзын жұмыс 1-2 минутқа созылуы мүмкін)';
+  btn.textContent = 'Жасалуда... (бір минутқа дейін)';
 
   const data = Object.fromEntries(new FormData(form).entries());
   data.idToken = currentIdToken;
