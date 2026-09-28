@@ -68,7 +68,7 @@ async function callGemini({ subject, topic, plan }) {
   // Gemini аса жүктелген кезде (503/500) бірнеше рет қайталап көреміз.
   // 429 (лимит таусылды) қайталанбайды: қайталау лимитті тағы жейді.
   const RETRY_STATUSES = [500, 503];
-  const DELAYS_MS = [3000, 6000, 10000]; // 1-ші әрекеттен кейін 3с, содан 6с, 10с
+  const DELAYS_MS = [3000, 6000]; // бар болғаны 2 қайталау: 3с, содан 6с
   let resp;
 
   for (let attempt = 0; attempt <= DELAYS_MS.length; attempt++) {
@@ -80,7 +80,9 @@ async function callGemini({ subject, topic, plan }) {
         generationConfig: {
           temperature: 0.7,
           responseMimeType: "application/json",
-          maxOutputTokens: 32768, // ұзын жұмыстарға жеткілікті (модель шегі 65536)
+          maxOutputTokens: 16384, // стандарт жұмысқа (~1200 сөз) жеткілікті
+          // Ойлау деңгейін төмендету: жауап әлдеқайда тез келеді
+          thinkingConfig: { thinkingLevel: "low" },
         },
       }),
     });
