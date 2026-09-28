@@ -101,7 +101,7 @@
       <input name="subject" placeholder="Мысалы: Қазақстан тарихы" />
 
       <label>Студент (аты-жөні) *</label>
-      <input name="student" required placeholder="Ошақбай Бақәулет" />
+      <input name="student" required placeholder="Жарылқасын Еркежан" />
 
       <label>Оқытушы</label>
       <input name="teacher" placeholder="Есенаманова Айдана" />
@@ -122,11 +122,62 @@
 const GOOGLE_CLIENT_ID = "1056990394829-p54m601t1j6p63r1fqfh9i3hv0q042ht.apps.googleusercontent.com";
 let currentIdToken = null;
 
-function handleCredentialResponse(response) {
-  currentIdToken = response.credential;
-  document.getElementById('loginStatus').textContent = '';
-  document.getElementById('loginBox').style.display = 'none';
-  document.getElementById('form').classList.add('unlocked');
+// Рұқсат сұрау үшін WhatsApp нөмірі (тек цифрлар, "+" белгісіз)
+const WHATSAPP_NUMBER = "+77056308735";
+
+// "Рұқсат алу үшін <сілтеме>" хабарын көрсетеді
+function showNoAccess(email) {
+  const box = document.getElementById('loginStatus');
+  box.textContent = '';
+  box.style.color = '#d33';
+
+  const msg = 'Сәлем! СӨЖ генераторына рұқсат алғым келеді.' + (email ? ' Менің email: ' + email : '');
+  const link = document.createElement('a');
+  link.href = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent(msg);
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'https://wa.me/' + WHATSAPP_NUMBER;
+
+  const line = document.createElement('div');
+  line.append('Рұқсат алу үшін ', link);
+  box.appendChild(line);
+
+  if (email) {
+    const small = document.createElement('div');
+    small.style.cssText = 'margin-top:6px;color:#888;font-size:12px;';
+    small.textContent = 'Сіз кірген email: ' + email;
+    box.appendChild(small);
+  }
+}
+
+async function handleCredentialResponse(response) {
+  const box = document.getElementById('loginStatus');
+  box.style.color = '#666';
+  box.textContent = 'Тексерілуде...';
+
+  try {
+    const resp = await fetch('/api/check-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: response.credential })
+    });
+    const data = await resp.json().catch(() => ({}));
+
+    if (resp.ok && data.allowed) {
+      currentIdToken = response.credential;
+      box.textContent = '';
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('form').classList.add('unlocked');
+    } else if (resp.status === 403) {
+      showNoAccess(data.email);
+    } else {
+      box.style.color = '#d33';
+      box.textContent = data.error || 'Кіру қатесі. Қайталап көріңіз.';
+    }
+  } catch (e) {
+    box.style.color = '#d33';
+    box.textContent = 'Байланыс қатесі. Қайталап көріңіз.';
+  }
 }
 
 window.onload = () => {
@@ -170,6 +221,15 @@ form.addEventListener('submit', async (e) => {
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
+      if (resp.status === 403 || resp.status === 401) {
+        // рұқсат жоқ немесе кіру мерзімі өтті: қайта кіру экранына оралу
+        currentIdToken = null;
+        document.getElementById('form').classList.remove('unlocked');
+        document.getElementById('loginBox').style.display = 'block';
+        if (resp.status === 403) showNoAccess(err.email);
+        else document.getElementById('loginStatus').textContent = err.error || 'Қайтадан кіріңіз.';
+        return;
+      }
       throw new Error(err.error || 'Қате шықты');
     }
 
