@@ -1,0 +1,38 @@
+// Көлем үлгілері: "Беттер саны" тізіміндегі әр таңдау осы жерде сипатталған.
+// Сөз саны Word-тағы Times New Roman 12 pt, жирный, бір интервал, A4 бойынша есептелген.
+// "pages" = Word-тағы жалпы бет саны (титул + жоспар + мәтін + әдебиеттер).
+
+const PLANS = {
+  // Колледж регламенті: Кіріспе = 1 бет, Негізгі бөлім = 1.5 бет
+  standard: {
+    label: "Стандарт",
+    kirispe: 400,
+    negizgi: 590,
+    subsections: 3,
+    qorytyndy: 150,
+    // Кіріспе дәл 1 бет болуы үшін Негізгі бөлім жаңа беттен басталады
+    pageBreakBeforeNegizgi: true,
+  },
+  "7": {
+    label: "7 бет",
+    kirispe: 640,
+    negizgi: 1100,
+    subsections: 4,
+    qorytyndy: 230,
+    pageBreakBeforeNegizgi: false,
+  },
+  "10": {
+    label: "10 бет",
+    kirispe: 850,
+    negizgi: 2000,
+    subsections: 5,
+    qorytyndy: 350,
+    pageBreakBeforeNegizgi: false,
+  },
+};
+
+function getPlan(key) {
+  return PLANS[String(key)] || PLANS.standard;
+}
+
+module.exports = { PLANS, getPlan };
