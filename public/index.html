@@ -78,9 +78,63 @@
   #status.error { color: #d33; }
   #status.ok { color: #1a8f3c; }
   #form.unlocked { display: block !important; }
+
+  /* --- Splash экраны (кіру алдындағы логотиптер) --- */
+  #splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #0d1030;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.6s ease;
+  }
+  #splash.hide {
+    opacity: 0;
+    pointer-events: none;
+  }
+  #splash img {
+    width: 42vw;
+    max-width: 220px;
+    min-width: 120px;
+    box-shadow: 0 0 40px rgba(255,255,255,0.15);
+  }
+  #splash-baqlet {
+    border-radius: 50%;
+    animation: splashSpin 1.6s linear infinite;
+  }
+  #splash-sojcreator {
+    display: none;
+    border-radius: 16px;
+    background: #fff;
+    padding: 10px;
+    animation: splashBreathe 2.2s ease-in-out infinite;
+  }
+  @keyframes splashSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes splashBreathe {
+    0%, 100% { transform: scale(1); opacity: 0.92; }
+    50% { transform: scale(1.08); opacity: 1; }
+  }
+  #app-root {
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  #app-root.show {
+    opacity: 1;
+  }
 </style>
 </head>
 <body>
+  <div id="splash">
+    <img id="splash-baqlet" src="/img/splash-baqlet.jpg" alt="Baqlet Project" />
+    <img id="splash-sojcreator" src="/img/splash-sojcreator.jpg" alt="SojCreator" />
+  </div>
+
+  <div id="app-root">
   <div class="card">
     <h1>СӨЖ генераторы</h1>
     <p class="sub">Тақырыпты, аты-жөніңізді және топты енгізіңіз — .docx файл автоматты дайын болады.</p>
@@ -116,6 +170,7 @@
       <div id="status"></div>
     </form>
   </div>
+  </div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
@@ -123,7 +178,7 @@ const GOOGLE_CLIENT_ID = "1056990394829-p54m601t1j6p63r1fqfh9i3hv0q042ht.apps.go
 let currentIdToken = null;
 
 // Рұқсат сұрау үшін WhatsApp нөмірі (тек цифрлар, "+" белгісіз)
-const WHATSAPP_NUMBER = "+77056308735";
+const WHATSAPP_NUMBER = "7056308735";
 
 // "Рұқсат алу үшін <сілтеме>" хабарын көрсетеді
 function showNoAccess(email) {
@@ -252,6 +307,25 @@ form.addEventListener('submit', async (e) => {
     btn.textContent = 'Құжатты жасау';
   }
 });
+
+// --- Splash экрандар кезегі: Baqlet Project (айналады) -> SojCreator (дем алады) -> сайт ---
+(function runSplash() {
+  const splash = document.getElementById('splash');
+  const baqlet = document.getElementById('splash-baqlet');
+  const soj = document.getElementById('splash-sojcreator');
+  const root = document.getElementById('app-root');
+
+  setTimeout(() => {
+    baqlet.style.display = 'none';
+    soj.style.display = 'block';
+  }, 5000); // 5 секундтан кейін SojCreator логотипіне ауысады
+
+  setTimeout(() => {
+    splash.classList.add('hide');
+    root.classList.add('show');
+    setTimeout(() => { splash.style.display = 'none'; }, 650);
+  }, 11000); // 5с айналу + 6с дем алу = 11с
+})();
 </script>
 </body>
 </html>
