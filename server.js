@@ -63,20 +63,38 @@ async function callGemini({ subject, topic, pages }) {
   const prompt = buildSystemPrompt({ subject, topic, pages });
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.7,
-        responseMimeType: "application/json",
-      },
-    }),
-  });
+  // Gemini аса жүктелген кезде (503/429/500) бірнеше рет қайталап көреміз
+  const RETRY_STATUSES = [429, 500, 503];
+  const DELAYS_MS = [3000, 6000, 10000]; // 1-ші әрекеттен кейін 3с, содан 6с, 10с
+  let resp;
 
-  if (!resp.ok) {
+  for (let attempt = 0; attempt <= DELAYS_MS.length; attempt++) {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          responseMimeType: "application/json",
+        },
+      }),
+    });
+
+    if (resp.ok) break;
+
+    if (RETRY_STATUSES.includes(resp.status) && attempt < DELAYS_MS.length) {
+      console.log(`Gemini ${resp.status}, ${DELAYS_MS[attempt] / 1000}с күтіп қайталаймын...`);
+      await new Promise((r) => setTimeout(r, DELAYS_MS[attempt]));
+      continue;
+    }
+
     const errText = await resp.text();
+    if (RETRY_STATUSES.includes(resp.status)) {
+      throw new Error(
+        "Gemini қазір тым жүктелген. 1-2 минуттан кейін қайталап көріңіз."
+      );
+    }
     throw new Error(`Gemini API қатесі (${resp.status}): ${errText}`);
   }
 
