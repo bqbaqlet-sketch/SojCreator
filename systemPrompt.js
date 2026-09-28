@@ -1,7 +1,22 @@
 // Системный промпт для нейросети (Gemini).
 // Здесь можно менять стиль и требования к тексту — это главный "мозг" сайта.
+// Объёмы разделов приходят из plans.js (Стандарт / 7 бет / 10 бет).
 
-function buildSystemPrompt({ subject, topic, pages }) {
+function range(n, tolerance = 0.03) {
+  const d = Math.round(n * tolerance);
+  return `${n - d}-${n + d}`;
+}
+
+function buildSystemPrompt({ subject, topic, plan }) {
+  const subWords = Math.round(plan.negizgi / plan.subsections);
+  const kirispeParas = Math.max(3, Math.round(plan.kirispe / 100));
+  const subParas = Math.max(2, Math.round(subWords / 100));
+  const qorytyndyParas = plan.qorytyndy >= 300 ? 3 : 2;
+
+  const subItems = Array.from({ length: plan.subsections }, (_, i) =>
+    `    { "takyrypsha": "Ішкі тақырыпша ${i + 1}", "matin": "Осы ішкі бөлімнің мәтіні" }`
+  ).join(",\n");
+
   return `Сен қазақ тілінде колледж/университет студенттеріне арналған СӨЖ
 (студенттің өзіндік жұмысы) мәтінін жазатын көмекшісің.
 
@@ -13,12 +28,13 @@ function buildSystemPrompt({ subject, topic, pages }) {
    тым нақтылап көрсетпе.
 4. Пән: "${subject}". Тақырып: "${topic}".
 5. КӨЛЕМ ҚАТАҢ САҚТАЛУ КЕРЕК (Word-та Times New Roman 12 pt, бір интервал):
-   - "kirispe": дәл ~400 сөз (390-410 аралығында), яғни Word-тың бір беті.
-     Мәтін 4 абзацтан тұрсын, әр абзац шамамен 100 сөз.
-   - "negizgi_bolim": дәл 3 ішкі тақырыпша (артық та, кем де емес).
-     Барлық 3 бөлімнің мәтіні бірге ~590 сөз (570-610 аралығында),
-     яғни бір жарым бет. Әр ішкі бөлім ~195 сөз, 2 абзацтан тұрсын.
-   - "qorytyndy": ~150 сөз, 2 абзац.
+   - "kirispe": дәл ~${plan.kirispe} сөз (${range(plan.kirispe)} аралығында).
+     Мәтін ${kirispeParas} абзацтан тұрсын, әр абзац шамамен 100 сөз.
+   - "negizgi_bolim": дәл ${plan.subsections} ішкі тақырыпша (артық та, кем де емес).
+     Барлық ${plan.subsections} бөлімнің мәтіні бірге ~${plan.negizgi} сөз
+     (${range(plan.negizgi)} аралығында). Әр ішкі бөлім ~${subWords} сөз,
+     ${subParas} абзацтан тұрсын.
+   - "qorytyndy": ~${plan.qorytyndy} сөз, ${qorytyndyParas} абзац.
    - "adebietter": 4-6 көз.
    Сөздерді өзің санап, көлемнен аспа: артық жазсаң мәтін қысқартылады,
    кем жазсаң бет толмай қалады.
@@ -34,9 +50,7 @@ function buildSystemPrompt({ subject, topic, pages }) {
 {
   "kirispe": "Кіріспе бөлімінің толық мәтіні (бірнеше абзац)",
   "negizgi_bolim": [
-    { "takyrypsha": "Ішкі тақырыпша 1", "matin": "Осы ішкі бөлімнің мәтіні" },
-    { "takyrypsha": "Ішкі тақырыпша 2", "matin": "Осы ішкі бөлімнің мәтіні" },
-    { "takyrypsha": "Ішкі тақырыпша 3", "matin": "Осы ішкі бөлімнің мәтіні" }
+${subItems}
   ],
   "qorytyndy": "Қорытынды бөлімінің толық мәтіні",
   "adebietter": [
@@ -45,8 +59,9 @@ function buildSystemPrompt({ subject, topic, pages }) {
   ]
 }
 
-"negizgi_bolim" ішінде дәл 3 ішкі тақырыпша болсын.
+"negizgi_bolim" ішінде дәл ${plan.subsections} ішкі тақырыпша болсын.
 "adebietter" ішінде 4-6 әдебиет көзі болсын.`;
 }
 
 module.exports = { buildSystemPrompt };
+;
