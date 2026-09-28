@@ -6,7 +6,7 @@ const fetch = require("node-fetch");
 const { buildSystemPrompt } = require("./systemPrompt");
 const { buildDocx } = require("./buildDocx");
 const { ALLOWED_EMAILS } = require("./allowedEmails");
-const { fitContent, isTooShort } = require("./fitLength");
+const { fitContent } = require("./fitLength");
 const { getPlan } = require("./plans");
 
 const app = express();
@@ -65,8 +65,9 @@ async function callGemini({ subject, topic, plan }) {
   const prompt = buildSystemPrompt({ subject, topic, plan });
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
-  // Gemini аса жүктелген кезде (503/429/500) бірнеше рет қайталап көреміз
-  const RETRY_STATUSES = [429, 500, 503];
+  // Gemini аса жүктелген кезде (503/500) бірнеше рет қайталап көреміз.
+  // 429 (лимит таусылды) қайталанбайды: қайталау лимитті тағы жейді.
+  const RETRY_STATUSES = [500, 503];
   const DELAYS_MS = [3000, 6000, 10000]; // 1-ші әрекеттен кейін 3с, содан 6с, 10с
   let resp;
 
@@ -92,13 +93,26 @@ async function callGemini({ subject, topic, plan }) {
       continue;
     }
 
+    // Google-дың нақты қате мәтінін оқимыз, сонда шын себеп көрінеді
     const errText = await resp.text();
-    if (RETRY_STATUSES.includes(resp.status)) {
+    let googleMsg = errText;
+    try {
+      googleMsg = JSON.parse(errText)?.error?.message || errText;
+    } catch (_) {}
+    googleMsg = String(googleMsg).slice(0, 300);
+    console.error(`Gemini ${resp.status}: ${googleMsg}`);
+
+    if (resp.status === 429) {
       throw new Error(
-        "Gemini қазір тым жүктелген. 1-2 минуттан кейін қайталап көріңіз."
+        `Gemini лимиті таусылды (429). Google айтуы: ${googleMsg}`
       );
     }
-    throw new Error(`Gemini API қатесі (${resp.status}): ${errText}`);
+    if (RETRY_STATUSES.includes(resp.status)) {
+      throw new Error(
+        `Gemini жауап бермеді (${resp.status}). Google айтуы: ${googleMsg}`
+      );
+    }
+    throw new Error(`Gemini API қатесі (${resp.status}): ${googleMsg}`);
   }
 
   const data = await resp.json();
@@ -138,20 +152,6 @@ app.post("/api/generate", async (req, res) => {
       topic,
       plan,
     });
-
-    // Стандарт үлгіде мәтін тым қысқа шықса, бір рет қайта жасатамыз
-    // (ұзын жұмыстарда уақытты үнемдеу үшін қайталамаймыз)
-    if (plan === getPlan("standard") && isTooShort(content, plan)) {
-      try {
-        content = await callGemini({
-          subject: subject || "Пән",
-          topic,
-          plan,
-        });
-      } catch (e) {
-        console.log("Қайта жасау сәтсіз, бірінші нұсқа қолданылады:", e.message);
-      }
-    }
 
     // Тым ұзын болса — толық сөйлемдермен қысқартамыз
     content = fitContent(content, plan);
