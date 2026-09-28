@@ -67,6 +67,42 @@ function extractJson(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+// Бір модельге бір сұраныс. Уақыт шегі бар: модель "қатып қалса" мәңгі күтпейміз.
+const TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || "90000", 10);
+const COOLDOWN_MS = parseInt(process.env.GEMINI_COOLDOWN_MS || "180000", 10);
+const cooldownUntil = {}; // модель -> қашанға дейін "демалады" (уақыт белгісі)
+
+async function requestModel(model, apiKey, prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const t0 = Date.now();
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          responseMimeType: "application/json",
+          maxOutputTokens: 16384, // стандарт жұмысқа (~1200 сөз) жеткілікті
+          // Ойлау деңгейін төмендету: жауап әлдеқайда тез келеді
+          thinkingConfig: { thinkingLevel: "low" },
+        },
+      }),
+    });
+    const raw = await resp.text();
+    return { ok: resp.ok, status: resp.status, raw, ms: Date.now() - t0 };
+  } catch (e) {
+    const timedOut = e.name === "AbortError";
+    return { ok: false, status: timedOut ? "timeout" : "network", raw: e.message, ms: Date.now() - t0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function callGemini({ subject, topic, plan }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -76,58 +112,64 @@ async function callGemini({ subject, topic, plan }) {
   }
 
   const prompt = buildSystemPrompt({ subject, topic, plan });
-  // 500/503 — қайталап көреміз. Негізгі модель өтпесе, қосалқы модельге ауысамыз.
-  // Қосалқыға ауысатын жағдайлар: 429, 500, 503, 404 (модель жабылған).
+
   const RETRY_STATUSES = [500, 503];
-  const FALLBACK_STATUSES = [429, 500, 503, 404];
-  let resp;
+  // Осы жағдайларда келесі модельге ауысамыз (немесе модель "демалады")
+  const FALLBACK_STATUSES = [429, 500, 503, 404, "timeout", "network"];
+  const COOLDOWN_STATUSES = [429, 500, 503, "timeout", "network"];
+
+  // Жақында сәтсіз болған модельдерді тізімнің соңына жылжытамыз,
+  // сонда әр жұмыс бос уақыт жоғалтпай, жұмыс істеп тұрған модельден бастайды
+  const now = Date.now();
+  const healthy = MODELS.filter((mdl) => !(cooldownUntil[mdl] > now));
+  const cooling = MODELS.filter((mdl) => cooldownUntil[mdl] > now);
+  const order = [...healthy, ...cooling];
+  if (cooling.length) {
+    console.log(`Кезекте кейінге қалды (жақында өтпеген): ${cooling.join(", ")}`);
+  }
+
+  let okResult = null;
   let lastFail = null;
 
-  for (let m = 0; m < MODELS.length; m++) {
-    const model = MODELS[m];
-    const isLast = m === MODELS.length - 1;
-    // негізгі модельде 1 қайталау, соңғы модельде 2 қайталау
-    const delays = isLast ? [3000, 6000] : [3000];
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  for (let m = 0; m < order.length; m++) {
+    const model = order[m];
+    const isLast = m === order.length - 1;
+    // Қосалқы модель бар кезде бір модельде қайталамаймыз, бірден келесісіне өтеміз.
+    // Тек соңғы модельде 2 қайталау бар.
+    const delays = isLast ? [3000, 6000] : [];
 
     for (let attempt = 0; attempt <= delays.length; attempt++) {
-      resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            responseMimeType: "application/json",
-            maxOutputTokens: 16384, // стандарт жұмысқа (~1200 сөз) жеткілікті
-            // Ойлау деңгейін төмендету: жауап әлдеқайда тез келеді
-            thinkingConfig: { thinkingLevel: "low" },
-          },
-        }),
-      });
+      const r = await requestModel(model, apiKey, prompt);
+      console.log(`⏱ ${model}: ${r.status} — ${(r.ms / 1000).toFixed(1)} с`);
 
-      if (resp.ok) break;
+      if (r.ok) {
+        okResult = { model, raw: r.raw };
+        break;
+      }
 
-      if (RETRY_STATUSES.includes(resp.status) && attempt < delays.length) {
-        console.log(`${model}: ${resp.status}, ${delays[attempt] / 1000}с күтіп қайталаймын...`);
-        await new Promise((r) => setTimeout(r, delays[attempt]));
+      if (RETRY_STATUSES.includes(r.status) && attempt < delays.length) {
+        console.log(`${model}: ${r.status}, ${delays[attempt] / 1000}с күтіп қайталаймын...`);
+        await new Promise((res) => setTimeout(res, delays[attempt]));
         continue;
       }
 
       // Google-дың нақты қате мәтінін оқимыз, сонда шын себеп көрінеді
-      const errText = await resp.text();
-      let googleMsg = errText;
+      let googleMsg = r.raw;
       try {
-        googleMsg = JSON.parse(errText)?.error?.message || errText;
+        googleMsg = JSON.parse(r.raw)?.error?.message || r.raw;
       } catch (_) {}
       googleMsg = String(googleMsg).slice(0, 300);
-      console.error(`${model}: ${resp.status}: ${googleMsg}`);
-      lastFail = { model, status: resp.status, msg: googleMsg };
+      console.error(`${model}: ${r.status}: ${googleMsg}`);
+      lastFail = { model, status: r.status, msg: googleMsg };
+      if (COOLDOWN_STATUSES.includes(r.status)) {
+        cooldownUntil[model] = Date.now() + COOLDOWN_MS;
+      }
       break;
     }
 
-    if (resp.ok) {
-      if (m > 0) console.log(`Қосалқы модель қолданылды: ${model}`);
+    if (okResult) {
+      delete cooldownUntil[okResult.model];
+      if (m > 0) console.log(`Қосалқы модель қолданылды: ${okResult.model}`);
       break;
     }
     if (!isLast && FALLBACK_STATUSES.includes(lastFail.status)) {
@@ -137,12 +179,15 @@ async function callGemini({ subject, topic, plan }) {
     break;
   }
 
-  if (!resp.ok) {
+  if (!okResult) {
     const { model, status, msg } = lastFail;
     if (status === 429) {
       throw new Error(`Gemini лимиті таусылды (429, ${model}). Google айтуы: ${msg}`);
     }
-    if (RETRY_STATUSES.includes(status)) {
+    if (status === "timeout") {
+      throw new Error(`Gemini тым ұзақ жауап берді (${model}). Қайталап көріңіз.`);
+    }
+    if (RETRY_STATUSES.includes(status) || status === "network") {
       throw new Error(
         `Gemini қазір жауап бермеді (${status}, ${model}). Бір-екі минуттан кейін қайталап көріңіз. Google айтуы: ${msg}`
       );
@@ -150,7 +195,7 @@ async function callGemini({ subject, topic, plan }) {
     throw new Error(`Gemini API қатесі (${status}, ${model}): ${msg}`);
   }
 
-  const data = await resp.json();
+  const data = JSON.parse(okResult.raw);
   const candidate = data?.candidates?.[0];
   const text = candidate?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini бос жауап қайтарды");
@@ -195,11 +240,15 @@ app.post("/api/generate", async (req, res) => {
 
     const plan = getPlan(pages);
 
+    const tStart = Date.now();
     let content = await callGemini({
       subject: subject || "Пән",
       topic,
       plan,
     });
+
+    const tGemini = Date.now();
+    console.log(`⏱ Gemini жауабы: ${((tGemini - tStart) / 1000).toFixed(1)} с`);
 
     // Тым ұзын болса — толық сөйлемдермен қысқартамыз
     content = fitContent(content, plan);
