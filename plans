@@ -13,22 +13,6 @@ const PLANS = {
     // Кіріспе дәл 1 бет болуы үшін Негізгі бөлім жаңа беттен басталады
     pageBreakBeforeNegizgi: true,
   },
-  "7": {
-    label: "7 бет",
-    kirispe: 640,
-    negizgi: 1100,
-    subsections: 4,
-    qorytyndy: 230,
-    pageBreakBeforeNegizgi: false,
-  },
-  "10": {
-    label: "10 бет",
-    kirispe: 850,
-    negizgi: 2000,
-    subsections: 5,
-    qorytyndy: 350,
-    pageBreakBeforeNegizgi: false,
-  },
 };
 
 function getPlan(key) {
