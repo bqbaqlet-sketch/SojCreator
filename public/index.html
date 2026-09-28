@@ -114,11 +114,9 @@
 
       <label>Беттер саны</label>
       <select name="pages">
-        <option value="2">2 бет</option>
-        <option value="3" selected>3 бет</option>
-        <option value="5">5 бет</option>
-        <option value="8">8 бет</option>
-        <option value="12">12 бет</option>
+        <option value="standard" selected>Стандарт (Кіріспе — 1 бет, Негізгі бөлім — 1,5 бет)</option>
+        <option value="7">≈ 7 бет</option>
+        <option value="10">≈ 10 бет</option>
       </select>
 
       <button type="submit" id="submitBtn">Құжатты жасау</button>
@@ -165,7 +163,7 @@ form.addEventListener('submit', async (e) => {
   }
 
   btn.disabled = true;
-  btn.textContent = 'Жасалуда... (10-30 сек)';
+  btn.textContent = 'Жасалуда... (ұзын жұмыс 1-2 минутқа созылуы мүмкін)';
 
   const data = Object.fromEntries(new FormData(form).entries());
   data.idToken = currentIdToken;
