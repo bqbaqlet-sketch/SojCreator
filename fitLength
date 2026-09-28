@@ -1,0 +1,77 @@
+// Бөлімдердің көлемін Word беттеріне сай ұстап тұру.
+// Өлшеу нәтижесі (Times New Roman 12 pt, жирный, бір интервал, A4):
+//   1 бет  ≈ 420 сөз  -> Кіріспе
+//   1.5 бет ≈ 590 сөз -> Негізгі бөлім (3 ішкі тақырыпшамен)
+
+const LIMITS = {
+  kirispeMax: 415, // 420-дан асса келесі бетке өтіп кетеді
+  kirispeMin: 340, // бұдан аз болса қайта жасатамыз
+  negizgiMax: 630,
+  negizgiMin: 500,
+};
+
+function countWords(text) {
+  return (text || "").split(/\s+/).filter(Boolean).length;
+}
+
+// Мәтінді maxWords сөзге дейін қысқартады: тек толық сөйлемдерді қалдырады
+function trimText(text, maxWords) {
+  if (countWords(text) <= maxWords) return text;
+
+  const paragraphs = text.split(/\n+/).filter((p) => p.trim());
+  const kept = [];
+  let used = 0;
+
+  for (const para of paragraphs) {
+    const words = countWords(para);
+    if (used + words <= maxWords) {
+      kept.push(para);
+      used += words;
+      continue;
+    }
+    // абзацты сөйлемдерге бөліп, сыйғанын ғана аламыз
+    const sentences = para.split(/(?<=[.!?…])\s+/);
+    const partial = [];
+    for (const s of sentences) {
+      const w = countWords(s);
+      if (used + w > maxWords) break;
+      partial.push(s);
+      used += w;
+    }
+    if (partial.length) kept.push(partial.join(" "));
+    break;
+  }
+  return kept.join("\n\n");
+}
+
+function negizgiWords(blocks) {
+  return (blocks || []).reduce((sum, b) => sum + countWords(b.matin), 0);
+}
+
+// Мәтін тым қысқа болса true
+function isTooShort(content) {
+  return (
+    countWords(content.kirispe) < LIMITS.kirispeMin ||
+    negizgiWords(content.negizgi_bolim) < LIMITS.negizgiMin
+  );
+}
+
+// Тым ұзын болса — қысқартады
+function fitContent(content) {
+  const fitted = { ...content };
+  fitted.kirispe = trimText(content.kirispe || "", LIMITS.kirispeMax);
+
+  // Артық болса, барлық ішкі бөлімдерді пропорционалды қысқартамыз,
+  // сонда 3 тақырыпшаның үшеуі де қалады
+  const src = content.negizgi_bolim || [];
+  const total = negizgiWords(src);
+  const ratio = total > LIMITS.negizgiMax ? LIMITS.negizgiMax / total : 1;
+  const blocks = src.map((b) => ({
+    ...b,
+    matin: trimText(b.matin || "", Math.floor(countWords(b.matin) * ratio)),
+  }));
+  fitted.negizgi_bolim = blocks;
+  return fitted;
+}
+
+module.exports = { fitContent, isTooShort, countWords, LIMITS };
