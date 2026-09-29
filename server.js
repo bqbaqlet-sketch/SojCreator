@@ -17,6 +17,11 @@ app.use(express.static(path.join(__dirname, "public")));
 // Бірінші модель — негізгі, келесілері — қосалқы (негізгісі жүктелген болса ауысады).
 // Керек болса Render-де GEMINI_MODELS айнымалысымен өзгертуге болады: "модель1,модель2"
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+// OpenRouter — Groq-тан кейінгі, толығымен басқа компаниядан (Google-ға да,
+// Groq-қа да қатысы жоқ) соңғы қосалқы. meta-llama Kazakh тілінде
+// gpt-oss-ке қарағанда "ойлау" мәселесі жоқ, тұрақтырақ жауап береді.
+const OPENROUTER_MODEL =
+  process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free";
 
 const MODELS = (process.env.GEMINI_MODELS || "gemini-3.8-flash,gemini-3.7-flash")
   .split(",")
@@ -87,6 +92,46 @@ const COOLDOWN_MS = parseInt(process.env.GEMINI_COOLDOWN_MS || "180000", 10);
 const cooldownUntil = {}; // модель -> қашанға дейін "демалады" (уақыт белгісі)
 
 // Groq (басқа компания) — барлық Gemini модельдері өтпей қалса, соңғы амал ретінде
+// OpenRouter — Groq да, барлық Gemini де өтпесе, соңғы амал
+async function requestOpenRouter(prompt) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return { ok: false, status: "no-key", raw: "OPENROUTER_API_KEY орнатылмаған", ms: 0 };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const t0 = Date.now();
+  try {
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        temperature: 0.7,
+        max_tokens: 12000,
+        messages: [
+          {
+            role: "user",
+            content:
+              prompt +
+              '\n\nЖАУАПТЫ ТЕК ЖАРАМДЫ JSON ретінде қайтар. Басқа мәтін, түсініктеме немесе markdown (```) қоспа.',
+          },
+        ],
+      }),
+    });
+    const raw = await resp.text();
+    return { ok: resp.ok, status: resp.status, raw, ms: Date.now() - t0 };
+  } catch (e) {
+    const timedOut = e.name === "AbortError";
+    return { ok: false, status: timedOut ? "timeout" : "network", raw: e.message, ms: Date.now() - t0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function requestGroq(prompt) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return { ok: false, status: "no-key", raw: "GROQ_API_KEY орнатылмаған", ms: 0 };
@@ -263,6 +308,19 @@ async function callGemini({ subject, topic, plan }) {
     }
   }
 
+  // Groq да өтпесе — мүлдем басқа компаниядан (OpenRouter) соңғы амал
+  if (!okResult) {
+    console.log(`Groq да өтпеді, OpenRouter-ге (${OPENROUTER_MODEL}) ауысамын...`);
+    const o = await requestOpenRouter(prompt);
+    console.log(`⏱ openrouter/${OPENROUTER_MODEL}: ${o.status} — ${(o.ms / 1000).toFixed(1)} с`);
+
+    if (o.ok) {
+      okResult = { model: `openrouter/${OPENROUTER_MODEL}`, raw: o.raw, provider: "groq" }; // жауап пішіні Groq-пен бірдей (OpenAI үлгісі)
+    } else if (o.status !== "no-key") {
+      console.error(`openrouter/${OPENROUTER_MODEL}: ${o.status}: ${String(o.raw).slice(0, 300)}`);
+    }
+  }
+
   if (!okResult) {
     const { model, status, msg } = lastFail;
     if (status === 429) {
@@ -273,7 +331,7 @@ async function callGemini({ subject, topic, plan }) {
     }
     if (RETRY_STATUSES.includes(status) || status === "network") {
       throw new Error(
-        `Gemini және қосалқы қызмет (Groq) қазір жауап бермеді (${status}, ${model}). Бір-екі минуттан кейін қайталап көріңіз. Google айтуы: ${msg}`
+        `Барлық қызметтер (Gemini, Groq, OpenRouter) қазір жауап бермеді (${status}, ${model}). Бір-екі минуттан кейін қайталап көріңіз. Соңғы қате: ${msg}`
       );
     }
     throw new Error(`Gemini API қатесі (${status}, ${model}): ${msg}`);
