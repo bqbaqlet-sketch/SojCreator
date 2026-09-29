@@ -105,7 +105,11 @@ async function requestGroq(prompt) {
       body: JSON.stringify({
         model: GROQ_MODEL,
         temperature: 0.7,
-        max_tokens: 8000, // JSON толық шықпай, үзіліп қалмас үшін
+        max_tokens: 12000, // ойлауға + жауапқа жеткілікті қор
+        // gpt-oss модельдері әдепкі бойынша токен қорын "ойлауға" жұмсап,
+        // нақты жауапты бос қалдыруы мүмкін. Соны болдырмау үшін:
+        reasoning_effort: "low",
+        reasoning_format: "hidden",
         // ЕСКЕРТУ: response_format:"json_object" қасақана қоспаймыз.
         // Groq-тың қатаң JSON тексерушісі кейде дұрыс жауапты да
         // "жарамсыз" деп тастайды (json_validate_failed). Оның орнына
@@ -280,7 +284,14 @@ async function callGemini({ subject, topic, plan }) {
   let text;
   if (okResult.provider === "groq") {
     text = data?.choices?.[0]?.message?.content;
-    if (!text) throw new Error("Groq бос жауап қайтарды");
+    if (!text) {
+      const finish = data?.choices?.[0]?.finish_reason;
+      const reasoningLen = (data?.choices?.[0]?.message?.reasoning || "").length;
+      throw new Error(
+        `Groq бос жауап қайтарды (finish_reason=${finish}, reasoning=${reasoningLen} таңба). ` +
+          `Мүмкін max_tokens жеткіліксіз болды.`
+      );
+    }
   } else {
     const candidate = data?.candidates?.[0];
     text = candidate?.content?.parts?.[0]?.text;
