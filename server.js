@@ -93,6 +93,7 @@ async function requestGroq(prompt) {
       body: JSON.stringify({
         model: GROQ_MODEL,
         temperature: 0.7,
+        max_tokens: 8000, // JSON толық шықпай, үзіліп қалмас үшін
         response_format: { type: "json_object" },
         messages: [{ role: "user", content: prompt }],
       }),
@@ -169,9 +170,9 @@ async function callGemini({ subject, topic, plan }) {
   for (let m = 0; m < order.length; m++) {
     const model = order[m];
     const isLast = m === order.length - 1;
-    // Қосалқы модель бар кезде бір модельде қайталамаймыз, бірден келесісіне өтеміз.
-    // Тек соңғы модельде 2 қайталау бар.
-    const delays = isLast ? [3000, 6000] : [];
+    // Соңғы модельде 1 қысқа қайталау ғана: одан кейін бәрібір Groq-қа өтеміз,
+    // сондықтан ұзақ күтудің қажеті жоқ
+    const delays = isLast ? [2500] : [];
 
     for (let attempt = 0; attempt <= delays.length; attempt++) {
       const r = await requestModel(model, apiKey, prompt);
@@ -215,14 +216,22 @@ async function callGemini({ subject, topic, plan }) {
   }
 
   // Barлық Gemini модельдері өтпесе, соңғы амал ретінде Groq-қа сұраймыз
+  // (Groq біздің соңғы мүмкіндігіміз болғандықтан, бір рет қайталап көреміз)
   if (!okResult) {
-    console.log(`Барлық Gemini модельдері өтпеді, Groq-қа (${GROQ_MODEL}) ауысамын...`);
-    const g = await requestGroq(prompt);
-    console.log(`⏱ groq/${GROQ_MODEL}: ${g.status} — ${(g.ms / 1000).toFixed(1)} с`);
+    for (let i = 0; i < 2; i++) {
+      console.log(
+        i === 0
+          ? `Барлық Gemini модельдері өтпеді, Groq-қа (${GROQ_MODEL}) ауысамын...`
+          : `Groq қайта көреді...`
+      );
+      const g = await requestGroq(prompt);
+      console.log(`⏱ groq/${GROQ_MODEL}: ${g.status} — ${(g.ms / 1000).toFixed(1)} с`);
 
-    if (g.ok) {
-      okResult = { model: `groq/${GROQ_MODEL}`, raw: g.raw, provider: "groq" };
-    } else if (g.status !== "no-key") {
+      if (g.ok) {
+        okResult = { model: `groq/${GROQ_MODEL}`, raw: g.raw, provider: "groq" };
+        break;
+      }
+      if (g.status === "no-key") break; // ключ жоқ болса, қайталаудың мәні жоқ
       console.error(`groq/${GROQ_MODEL}: ${g.status}: ${String(g.raw).slice(0, 300)}`);
     }
   }
