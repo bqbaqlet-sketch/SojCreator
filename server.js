@@ -66,7 +66,19 @@ function extractJson(text) {
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error("Модель не вернула JSON");
-  return JSON.parse(cleaned.slice(start, end + 1));
+  const candidate = cleaned.slice(start, end + 1);
+
+  try {
+    return JSON.parse(candidate);
+  } catch (e) {
+    // Кейде модель "\n" орнына нақты жол ауыстыруды қояды, бұл JSON-ды
+    // бұзады. Жол ішіндегі қараусыз бақылау таңбаларын тазалап,
+    // қайта көреміз.
+    const repaired = candidate.replace(/"((?:[^"\\]|\\.)*)"/gs, (m, inner) =>
+      '"' + inner.replace(/[\n\r\t]/g, (c) => ({ "\n": "\\n", "\r": "", "\t": "\\t" }[c])) + '"'
+    );
+    return JSON.parse(repaired);
+  }
 }
 
 // Бір модельге бір сұраныс. Уақыт шегі бар: модель "қатып қалса" мәңгі күтпейміз.
@@ -94,8 +106,19 @@ async function requestGroq(prompt) {
         model: GROQ_MODEL,
         temperature: 0.7,
         max_tokens: 8000, // JSON толық шықпай, үзіліп қалмас үшін
-        response_format: { type: "json_object" },
-        messages: [{ role: "user", content: prompt }],
+        // ЕСКЕРТУ: response_format:"json_object" қасақана қоспаймыз.
+        // Groq-тың қатаң JSON тексерушісі кейде дұрыс жауапты да
+        // "жарамсыз" деп тастайды (json_validate_failed). Оның орнына
+        // модель кәдімгі мәтін ретінде жазады, ал JSON-ды өзіміз
+        // extractJson() арқылы аламыз (Gemini-де де солай істейміз).
+        messages: [
+          {
+            role: "user",
+            content:
+              prompt +
+              '\n\nЖАУАПТЫ ТЕК ЖАРАМДЫ JSON ретінде қайтар. Басқа мәтін, түсініктеме немесе markdown (```) қоспа. JSON тырнақшаларының ("), артқы қиғаш сызықтардың (\\) дұрыс экрандалғанына көз жеткіз.',
+          },
+        ],
       }),
     });
     const raw = await resp.text();
