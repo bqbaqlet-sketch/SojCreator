@@ -9,7 +9,7 @@ const PLANS = {
     kirispe: 400,
     negizgi: 590,
     subsections: 3,
-    qorytyndy: 150,
+    qorytyndy: 400, // 1 бетке толық сыю үшін (Кіріспемен бірдей көлем)
     // Кіріспе дәл 1 бет болуы үшін Негізгі бөлім жаңа беттен басталады
     pageBreakBeforeNegizgi: true,
   },
