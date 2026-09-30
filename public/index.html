@@ -79,6 +79,33 @@
   #status.ok { color: #1a8f3c; }
   #form.unlocked { display: block !important; }
 
+  .howto {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #eee;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.55;
+    text-align: left;
+  }
+  .howto h2 {
+    font-size: 14px;
+    color: var(--blue);
+    margin: 16px 0 6px;
+  }
+  .howto h2:first-child { margin-top: 0; }
+  .howto p { margin: 0 0 6px; }
+  .howto ol { margin: 0 0 6px; padding-left: 20px; }
+  .howto li { margin-bottom: 4px; }
+  .howto a { color: var(--blue); }
+
+  .footer {
+    text-align: center;
+    margin-top: 18px;
+    font-size: 12px;
+    color: #aaa;
+  }
+
   /* --- Splash экраны (кіру алдындағы логотиптер) --- */
   #splash {
     position: fixed;
@@ -145,6 +172,34 @@
       </p>
       <div id="googleBtn"></div>
       <div id="loginStatus" style="margin-top:10px;font-size:13px;color:#d33;"></div>
+
+      <div class="howto">
+        <h2>Бұл сайт не істейді?</h2>
+        <p>
+          Бұл сайт колледж/университет студенттеріне арналған СӨЖ
+          (студенттің өзіндік жұмысы) құжатын қазақ тілінде автоматты
+          түрде жазып, дайын <strong>.docx</strong> файл ретінде береді —
+          титул парағы, жоспар, кіріспе, негізгі бөлім, қорытынды және
+          әдебиеттер тізімімен толық.
+        </p>
+
+        <h2>Қалай пайдалану керек?</h2>
+        <ol>
+          <li>Жоғарыдағы <strong>Google</strong> батырмасы арқылы рұқсат етілген Gmail-мен кіріңіз.</li>
+          <li>Тақырыпты, пәнді, аты-жөніңізді, оқытушыны, курс пен топты толтырыңыз.</li>
+          <li><strong>«Құжатты жасау»</strong> батырмасын басыңыз.</li>
+          <li>Күте тұрыңыз — құжат <strong>шамамен 1-2 минутта</strong> дайын болып, автоматты жүктеледі.</li>
+        </ol>
+
+        <h2>Рұқсат қалай алынады?</h2>
+        <p>
+          Сайтты пайдалану үшін жазылым қажет. Алғашқы ай —
+          <strong>500 теңге</strong>, келесі әр ай — <strong>1000 теңге</strong>.
+          Жазылым алу немесе ұзарту үшін WhatsApp-қа жазыңыз:
+          <a href="https://wa.me/7056308735" target="_blank" rel="noopener">https://wa.me/7056308735</a>
+          — хатыңызда өзіңіздің Gmail-іңізді көрсетіңіз, сол email жазылымға қосылады.
+        </p>
+      </div>
     </div>
 
     <form id="form" style="display:none;">
@@ -155,7 +210,7 @@
       <input name="subject" placeholder="Мысалы: Қазақстан тарихы" />
 
       <label>Студент (аты-жөні) *</label>
-      <input name="student" required placeholder="Жарылқасын Еркежан" />
+      <input name="student" required placeholder="Ошақбай Бақдаулет" />
 
       <label>Оқытушы</label>
       <input name="teacher" placeholder="Есенаманова Айдана" />
@@ -170,6 +225,8 @@
       <div id="status"></div>
     </form>
   </div>
+
+  <div class="footer">Version 0.1</div>
   </div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
