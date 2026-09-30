@@ -155,7 +155,7 @@
       <input name="subject" placeholder="Мысалы: Қазақстан тарихы" />
 
       <label>Студент (аты-жөні) *</label>
-      <input name="student" required placeholder="Ошақбай Бақдаулет" />
+      <input name="student" required placeholder="Жарылқасын Еркежан" />
 
       <label>Оқытушы</label>
       <input name="teacher" placeholder="Есенаманова Айдана" />
@@ -180,13 +180,26 @@ let currentIdToken = null;
 // Рұқсат сұрау үшін WhatsApp нөмірі (тек цифрлар, "+" белгісіз)
 const WHATSAPP_NUMBER = "7056308735";
 
-// "Рұқсат алу үшін <сілтеме>" хабарын көрсетеді
-function showNoAccess(email) {
+// "Рұқсат алу үшін <сілтеме>" хабарын көрсетеді. reason: "EXPIRED" болса,
+// жазылымның мерзімі біткенін айтады, әйтпесе — мүлдем тізімде жоқ дейді.
+function showNoAccess(email, reason, expiredOn) {
   const box = document.getElementById('loginStatus');
   box.textContent = '';
   box.style.color = '#d33';
 
-  const msg = 'Сәлем! СӨЖ генераторына рұқсат алғым келеді.' + (email ? ' Менің email: ' + email : '');
+  const heading = document.createElement('div');
+  heading.style.cssText = 'margin-bottom:6px;font-weight:600;';
+  heading.textContent =
+    reason === 'EXPIRED'
+      ? 'Жазылымыңыздың мерзімі бітті' + (expiredOn ? ' (' + expiredOn + ')' : '') + '.'
+      : 'Бұл email-ге рұқсат жоқ.';
+  box.appendChild(heading);
+
+  const msg =
+    (reason === 'EXPIRED'
+      ? 'Сәлем! Жазылымымды ұзартқым келеді.'
+      : 'Сәлем! СӨЖ генераторына рұқсат алғым келеді.') +
+    (email ? ' Менің email: ' + email : '');
   const link = document.createElement('a');
   link.href = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent(msg);
   link.target = '_blank';
@@ -194,7 +207,7 @@ function showNoAccess(email) {
   link.textContent = 'https://wa.me/' + WHATSAPP_NUMBER;
 
   const line = document.createElement('div');
-  line.append('Рұқсат алу үшін ', link);
+  line.append(reason === 'EXPIRED' ? 'Ұзарту үшін ' : 'Рұқсат алу үшін ', link);
   box.appendChild(line);
 
   if (email) {
@@ -224,7 +237,7 @@ async function handleCredentialResponse(response) {
       document.getElementById('loginBox').style.display = 'none';
       document.getElementById('form').classList.add('unlocked');
     } else if (resp.status === 403) {
-      showNoAccess(data.email);
+      showNoAccess(data.email, data.reason, data.expiredOn);
     } else {
       box.style.color = '#d33';
       box.textContent = data.error || 'Кіру қатесі. Қайталап көріңіз.';
@@ -281,7 +294,7 @@ form.addEventListener('submit', async (e) => {
         currentIdToken = null;
         document.getElementById('form').classList.remove('unlocked');
         document.getElementById('loginBox').style.display = 'block';
-        if (resp.status === 403) showNoAccess(err.email);
+        if (resp.status === 403) showNoAccess(err.email, err.reason, err.expiredOn);
         else document.getElementById('loginStatus').textContent = err.error || 'Қайтадан кіріңіз.';
         return;
       }
