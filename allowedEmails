@@ -1,6 +1,6 @@
 const ALLOWED_EMAILS = [
   "bqbaqlet@gmail.com",
-  "example2@gmail.com",
+  "seilbekumit@gmail.com",
 ];
 
 module.exports = { ALLOWED_EMAILS };
