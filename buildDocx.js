@@ -21,13 +21,14 @@ const LOGO_PATH = path.join(__dirname, "assets", "logo.jpeg");
 
 // Размеры в docx задаются в half-points: 12pt -> 24, 14pt -> 28, 16pt -> 32, 18pt -> 36
 const SZ = { body: 24, h2: 28, h3: 32, h4: 36, title: 144 };
+// h2 = 14pt (бөлім тақырыптары: КІРІСПЕ, НЕГІЗГІ БӨЛІМ, ҚОРЫТЫНДЫ, ішкі тақырыпшалар)
 const FONT = "Times New Roman";
 
 function run(text, opts = {}) {
   return new TextRun({
     text,
     font: FONT,
-    bold: opts.bold ?? true,
+    bold: opts.bold ?? false,
     italics: opts.italics ?? false,
     size: opts.size ?? SZ.body,
   });
@@ -120,7 +121,7 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
   const children = [];
 
   children.push(
-    para(run(`«${college}»`, { size: SZ.h2 }), {
+    para(run(`«${college}»`, { size: SZ.h2, bold: true }), {
       alignment: AlignmentType.CENTER,
     })
   );
@@ -141,14 +142,14 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
   }
 
   children.push(
-    para(run("СӨЖ", { size: SZ.title }), {
+    para(run("СӨЖ", { size: SZ.title, bold: true }), {
       alignment: AlignmentType.CENTER,
     })
   );
 
   children.push(
     para(
-      [run("Тақырыбы: ", { size: SZ.body }), run(topic, { size: SZ.body })],
+      [run("Тақырыбы: ", { size: SZ.body, bold: true }), run(topic, { size: SZ.body, bold: true })],
       { alignment: AlignmentType.LEFT }
     )
   );
@@ -179,7 +180,7 @@ function planPage() {
     "      ПАЙДАЛАНЫЛҒАН ӘДЕБИЕТТЕР",
   ];
   const children = [
-    para(run("ЖОСПАР", { size: SZ.h3 }), {
+    para(run("ЖОСПАР", { size: SZ.h3, bold: true }), {
       alignment: AlignmentType.CENTER,
       pageBreakBefore: true,
     }),
@@ -195,7 +196,7 @@ function planPage() {
 }
 
 function sectionHeading(text, opts = {}) {
-  return para(run(text, { size: SZ.h3 }), {
+  return para(run(text, { size: SZ.h2, bold: true }), {
     alignment: AlignmentType.CENTER,
     keepNext: true,
     ...opts,
@@ -206,7 +207,7 @@ function bodyParagraphs(text) {
   return text
     .split(/\n+/)
     .filter((p) => p.trim().length > 0)
-    .map((p) => para(run(p.trim(), { size: SZ.body, bold: true })));
+    .map((p) => para(run(p.trim(), { size: SZ.body, bold: false })));
 }
 
 async function buildDocx(content, meta) {
@@ -231,7 +232,7 @@ async function buildDocx(content, meta) {
   (content.negizgi_bolim || []).forEach((block) => {
     if (block.takyrypsha) {
       bodyChildren.push(
-        para(run(block.takyrypsha, { size: SZ.h2 }), {
+        para(run(block.takyrypsha, { size: SZ.h2, bold: true }), {
           alignment: AlignmentType.LEFT,
           keepNext: true,
         })
@@ -241,14 +242,14 @@ async function buildDocx(content, meta) {
   });
 
   // Қорытынды
-  bodyChildren.push(sectionHeading("ҚОРЫТЫНДЫ"));
+  bodyChildren.push(sectionHeading("ҚОРЫТЫНДЫ", { pageBreakBefore: true }));
   bodyChildren.push(...bodyParagraphs(content.qorytyndy || ""));
 
   // Әдебиеттер
   bodyChildren.push(sectionHeading("ПАЙДАЛАНЫЛҒАН ӘДЕБИЕТТЕР"));
   (content.adebietter || []).forEach((ref) => {
     bodyChildren.push(
-      para(run(ref, { size: SZ.body }), {
+      para(run(ref, { size: SZ.body, bold: false }), {
         alignment: AlignmentType.LEFT,
       })
     );
