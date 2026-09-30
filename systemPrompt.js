@@ -11,7 +11,7 @@ function buildSystemPrompt({ subject, topic, plan }) {
   const subWords = Math.round(plan.negizgi / plan.subsections);
   const kirispeParas = Math.max(3, Math.round(plan.kirispe / 100));
   const subParas = Math.max(2, Math.round(subWords / 100));
-  const qorytyndyParas = plan.qorytyndy >= 300 ? 3 : 2;
+  const qorytyndyParas = Math.max(3, Math.round(plan.qorytyndy / 100));
 
   const subItems = Array.from({ length: plan.subsections }, (_, i) =>
     `    { "takyrypsha": "Ішкі тақырыпша ${i + 1}", "matin": "Осы ішкі бөлімнің мәтіні" }`
@@ -64,4 +64,3 @@ ${subItems}
 }
 
 module.exports = { buildSystemPrompt };
-;
