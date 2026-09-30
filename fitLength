@@ -47,6 +47,8 @@ function limitsFor(plan) {
     kirispeMin: Math.round(plan.kirispe * 0.85),
     negizgiMax: Math.round(plan.negizgi * 1.07), // 590 -> 631
     negizgiMin: Math.round(plan.negizgi * 0.85),
+    qorytyndyMax: Math.round(plan.qorytyndy * 1.035), // Кіріспемен бірдей ереже
+    qorytyndyMin: Math.round(plan.qorytyndy * 0.85),
   };
 }
 
@@ -55,7 +57,8 @@ function isTooShort(content, plan) {
   const L = limitsFor(plan);
   return (
     countWords(content.kirispe) < L.kirispeMin ||
-    negizgiWords(content.negizgi_bolim) < L.negizgiMin
+    negizgiWords(content.negizgi_bolim) < L.negizgiMin ||
+    countWords(content.qorytyndy) < L.qorytyndyMin
   );
 }
 
@@ -75,8 +78,8 @@ function fitContent(content, plan) {
     matin: trimText(b.matin || "", Math.floor(countWords(b.matin) * ratio)),
   }));
 
-  // Қорытынды тым ұзақ болмасын (+15%)
-  fitted.qorytyndy = trimText(content.qorytyndy || "", Math.round(plan.qorytyndy * 1.15));
+  // Қорытынды тым ұзақ болмасын
+  fitted.qorytyndy = trimText(content.qorytyndy || "", L.qorytyndyMax);
   return fitted;
 }
 
