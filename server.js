@@ -5,7 +5,7 @@ const path = require("path");
 const fetch = require("node-fetch");
 const { buildSystemPrompt } = require("./systemPrompt");
 const { buildDocx } = require("./buildDocx");
-const { ALLOWED_EMAILS } = require("./allowedEmails");
+const { SUBSCRIPTIONS } = require("./allowedEmails");
 const { fitContent } = require("./fitLength");
 const { getPlan } = require("./plans");
 
@@ -58,8 +58,20 @@ async function verifyGoogleToken(idToken) {
   }
 
   const email = payload.email.toLowerCase();
-  if (!ALLOWED_EMAILS.map((e) => e.toLowerCase()).includes(email)) {
+  const sub = SUBSCRIPTIONS.find((s) => s.email.toLowerCase() === email);
+
+  if (!sub) {
     throw authError("Бұл email-ге рұқсат жоқ.", "NOT_ALLOWED", { email });
+  }
+  if (sub.expires) {
+    // "expires" күнінің соңына дейін (23:59:59) жарамды
+    const deadline = new Date(sub.expires + "T23:59:59");
+    if (Date.now() > deadline.getTime()) {
+      throw authError("Жазылымыңыздың мерзімі бітті.", "EXPIRED", {
+        email,
+        expiredOn: sub.expires,
+      });
+    }
   }
 
   return email;
@@ -368,8 +380,14 @@ app.post("/api/check-access", async (req, res) => {
     const email = await verifyGoogleToken(req.body.idToken);
     res.json({ allowed: true, email });
   } catch (err) {
-    if (err.code === "NOT_ALLOWED") {
-      return res.status(403).json({ allowed: false, error: err.message, email: err.email });
+    if (err.code === "NOT_ALLOWED" || err.code === "EXPIRED") {
+      return res.status(403).json({
+        allowed: false,
+        error: err.message,
+        email: err.email,
+        reason: err.code,
+        expiredOn: err.expiredOn,
+      });
     }
     res.status(401).json({ allowed: false, error: err.message || "Кіру қатесі" });
   }
@@ -431,8 +449,8 @@ app.post("/api/generate", async (req, res) => {
     res.send(buffer);
   } catch (err) {
     console.error(err);
-    const status = err.code === "NOT_ALLOWED" ? 403 : err.code === "INVALID_TOKEN" ? 401 : 500;
-    res.status(status).json({ error: err.message || "Белгісіз қате", email: err.email });
+    const status = err.code === "NOT_ALLOWED" || err.code === "EXPIRED" ? 403 : err.code === "INVALID_TOKEN" ? 401 : 500;
+    res.status(status).json({ error: err.message || "Белгісіз қате", email: err.email, reason: err.code, expiredOn: err.expiredOn });
   }
 });
 
