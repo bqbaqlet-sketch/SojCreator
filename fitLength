@@ -45,7 +45,7 @@ function limitsFor(plan) {
   return {
     kirispeMax: Math.round(plan.kirispe * 1.035), // 400 -> 414
     kirispeMin: Math.round(plan.kirispe * 0.85),
-    negizgiMax: Math.round(plan.negizgi * 1.07), // 590 -> 631
+    negizgiMax: Math.round(plan.negizgi * 1.02), // 3 бет толық толғанда шектен шықпас үшін тар қор
     negizgiMin: Math.round(plan.negizgi * 0.85),
     qorytyndyMax: Math.round(plan.qorytyndy * 1.035), // Кіріспемен бірдей ереже
     qorytyndyMin: Math.round(plan.qorytyndy * 0.85),
