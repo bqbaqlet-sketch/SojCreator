@@ -14,6 +14,24 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+// --- Себет (соңғы құжат) және есептегіш ---
+// ЕСКЕРТУ: екеуі де жадта (RAM) сақталады, файлда немесе базада емес.
+// Render қызметі қайта қосылса (деплой, ұйқыдан ояну, құлау) — екеуі де
+// нөлден басталады. Бұл "дайын файлды бірден қайта жүктеу" және
+// "шамамен қанша сұраныс болды" үшін жеткілікті, бірақ ұзақ мерзімді
+// тарих немесе дәл есеп керек болса — нағыз база керек болар еді.
+const lastDocuments = {}; // email -> { buffer, filename, topic, createdAt }
+const stats = { total: 0, byDate: {} };
+
+function recordGeneration(email, topic) {
+  const today = new Date().toISOString().slice(0, 10); // ЖЖЖЖ-АА-КК (UTC)
+  stats.total += 1;
+  stats.byDate[today] = (stats.byDate[today] || 0) + 1;
+  console.log(
+    `📊 Барлығы: ${stats.total} құжат | бүгін (${today}): ${stats.byDate[today]} | ${email} — "${topic}"`
+  );
+}
+
 // Бірінші модель — негізгі, келесілері — қосалқы (негізгісі жүктелген болса ауысады).
 // Керек болса Render-де GEMINI_MODELS айнымалысымен өзгертуге болады: "модель1,модель2"
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
@@ -393,10 +411,54 @@ app.post("/api/check-access", async (req, res) => {
   }
 });
 
+// Себеттен соңғы дайын файлды қайта жүктейді (жаңа генерация жасамай,
+// Gemini/Groq-қа сұраныс кетпейді)
+app.post("/api/last-document", async (req, res) => {
+  try {
+    const email = await verifyGoogleToken(req.body.idToken);
+    const doc = lastDocuments[email];
+
+    if (!doc) {
+      return res.status(404).json({ error: "Әзірге дайын құжат жоқ. Алдымен бір құжат жасаңыз." });
+    }
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${doc.filename}"`);
+    res.send(doc.buffer);
+  } catch (err) {
+    console.error(err);
+    const status = err.code === "NOT_ALLOWED" || err.code === "EXPIRED" ? 403 : err.code === "INVALID_TOKEN" ? 401 : 500;
+    res.status(status).json({ error: err.message || "Белгісіз қате", email: err.email, reason: err.code, expiredOn: err.expiredOn });
+  }
+});
+
+// Есептегішті көру үшін (жай браузерде ашуға болады):
+// https://sojcreator.onrender.com/api/stats?key=СІЗДІҢ_ADMIN_KEY
+// Render-де ADMIN_KEY айнымалысын қойғанша бұл эндпоинт өшірулі тұрады.
+app.get("/api/stats", (req, res) => {
+  const adminKey = process.env.ADMIN_KEY;
+  if (!adminKey) {
+    return res.status(404).json({ error: "ADMIN_KEY орнатылмаған." });
+  }
+  if (req.query.key !== adminKey) {
+    return res.status(403).json({ error: "Қате кілт." });
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  res.json({
+    total: stats.total,
+    today: stats.byDate[today] || 0,
+    byDate: stats.byDate,
+    note: "Бұл деректер тек жадта сақталады, сервер қайта қосылғанда нөлденеді.",
+  });
+});
+
 app.post("/api/generate", async (req, res) => {
   try {
     // Алдымен кіру құқығын тексереміз
-    await verifyGoogleToken(req.body.idToken);
+    const email = await verifyGoogleToken(req.body.idToken);
 
     const {
       topic,
@@ -438,14 +500,18 @@ app.post("/api/generate", async (req, res) => {
       pageBreakBeforeNegizgi: plan.pageBreakBeforeNegizgi,
     });
 
+    const filename = `SOJ_${Date.now()}.docx`;
+
+    // Себетке сақтаймыз: сайт жабылып қалса немесе жүктеу үзілсе,
+    // осы файлды қайта генерацияламай-ақ қайта жүктеуге болады
+    lastDocuments[email] = { buffer, filename, topic, createdAt: Date.now() };
+    recordGeneration(email, topic);
+
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="SOJ_${Date.now()}.docx"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(buffer);
   } catch (err) {
     console.error(err);
