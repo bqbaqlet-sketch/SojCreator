@@ -202,6 +202,13 @@
       </div>
     </div>
 
+    <div id="basketBox" style="display:none;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #eee;">
+      <button type="button" id="basketBtn" style="background:#f0f2fa;color:var(--blue);border:1px solid #dde1f5;">
+        Соңғы құжатты қайта жүктеу
+      </button>
+      <div id="basketStatus" style="margin-top:8px;font-size:12px;text-align:center;"></div>
+    </div>
+
     <form id="form" style="display:none;">
       <label>Тақырыбы *</label>
       <input name="topic" required placeholder="Мысалы: Шыңғысханның әлемдік тарихтағы рөлі" />
@@ -293,6 +300,7 @@ async function handleCredentialResponse(response) {
       box.textContent = '';
       document.getElementById('loginBox').style.display = 'none';
       document.getElementById('form').classList.add('unlocked');
+      document.getElementById('basketBox').style.display = 'block';
     } else if (resp.status === 403) {
       showNoAccess(data.email, data.reason, data.expiredOn);
     } else {
@@ -375,6 +383,48 @@ form.addEventListener('submit', async (e) => {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Құжатты жасау';
+  }
+});
+
+// --- Себет: соңғы дайын құжатты қайта жүктеу (жаңа генерациясыз) ---
+const basketBtn = document.getElementById('basketBtn');
+const basketStatus = document.getElementById('basketStatus');
+
+basketBtn.addEventListener('click', async () => {
+  basketStatus.style.color = '#666';
+  basketStatus.textContent = 'Жүктелуде...';
+  basketBtn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/last-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: currentIdToken })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      basketStatus.style.color = '#d33';
+      basketStatus.textContent = err.error || 'Әзірге дайын құжат жоқ.';
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'SOJ.docx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    basketStatus.style.color = '#1a8f3c';
+    basketStatus.textContent = 'Жүктелді!';
+  } catch (e) {
+    basketStatus.style.color = '#d33';
+    basketStatus.textContent = 'Байланыс қатесі.';
+  } finally {
+    basketBtn.disabled = false;
   }
 });
 
