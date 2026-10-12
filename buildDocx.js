@@ -169,6 +169,14 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
     );
   });
 
+  // Титул парағының ең төменгі жолы — "Тараз 2026"
+  children.push(
+    para(run("Тараз 2026", { size: SZ.h2, bold: false }), {
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 8800 },
+    })
+  );
+
   return children;
 }
 
