@@ -45,7 +45,7 @@ const MODELS = (process.env.GEMINI_MODELS || "gemini-3.8-flash,gemini-3.7-flash"
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
-const COLLEGE_NAME = "ТАРАЗ ИННОВАЦИЯЛЫҚ КӨПСАЛАЛЫ КОЛЛЕДЖІ";
+const COLLEGE_NAME = "ЖОҒАРЫ ТАРАЗ ИННОВАЦИЯЛЫҚ КӨПСАЛАЛЫ КОЛЛЕДЖІ";
 const GOOGLE_CLIENT_ID =
   "1056990394829-p54m601t1j6p63r1fqfh9i3hv0q042ht.apps.googleusercontent.com";
 
