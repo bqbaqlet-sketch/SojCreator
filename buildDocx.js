@@ -15,6 +15,7 @@ const {
   BorderStyle,
   VerticalAlign,
   Header,
+  Footer,
 } = require("docx");
 
 const LOGO_PATH = path.join(__dirname, "assets", "logo.jpeg");
@@ -169,15 +170,18 @@ function titlePage({ college, topic, subject, course, group, student, teacher })
     );
   });
 
-  // Титул парағының ең төменгі жолы — "Тараз 2026"
-  children.push(
-    para(run("Тараз 2026", { size: SZ.h2, bold: false }), {
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 8800 },
-    })
-  );
-
   return children;
+}
+
+// Тек бірінші (титул) беттің астыңғы жолы — "Тараз 2026"
+function titleFooter() {
+  return new Footer({
+    children: [
+      para(run("Тараз 2026", { size: SZ.h2, bold: false }), {
+        alignment: AlignmentType.CENTER,
+      }),
+    ],
+  });
 }
 
 function planPage() {
@@ -271,11 +275,19 @@ async function buildDocx(content, meta) {
             size: { width: 11906, height: 16838 }, // A4
             margin: { top: 1134, bottom: 1134, left: 1701, right: 850 },
           },
+          titlePage: true, // титул парағына бөлек header/footer қолдану үшін
         },
         headers: {
           default: new Header({
             children: [headerTable(group)],
           }),
+          first: new Header({
+            children: [headerTable(group)],
+          }),
+        },
+        footers: {
+          default: new Footer({ children: [] }),
+          first: titleFooter(),
         },
         children: bodyChildren,
       },
