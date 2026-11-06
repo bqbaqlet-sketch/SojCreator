@@ -6,7 +6,7 @@ const fetch = require("node-fetch");
 const { buildSystemPrompt } = require("./systemPrompt");
 const { buildDocx } = require("./buildDocx");
 const { SUBSCRIPTIONS } = require("./allowedEmails");
-const { fitContent } = require("./fitLength");
+const { fitContent, isTooShort, countWords, limitsFor } = require("./fitLength");
 const { getPlan } = require("./plans");
 
 const app = express();
@@ -241,7 +241,7 @@ async function requestModel(model, apiKey, prompt) {
   }
 }
 
-async function callGemini({ subject, topic, plan }) {
+async function callGemini({ subject, topic, plan, hint = "" }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -249,7 +249,7 @@ async function callGemini({ subject, topic, plan }) {
     );
   }
 
-  const prompt = buildSystemPrompt({ subject, topic, plan });
+  const prompt = buildSystemPrompt({ subject, topic, plan }) + hint;
 
   const RETRY_STATUSES = [500, 503];
   // Осы жағдайларда келесі модельге ауысамыз (немесе модель "демалады")
@@ -455,6 +455,43 @@ app.get("/api/stats", (req, res) => {
   });
 });
 
+function totalWords(c) {
+  return (
+    countWords(c.kirispe) +
+    (c.negizgi_bolim || []).reduce((n, b) => n + countWords(b.matin), 0) +
+    countWords(c.qorytyndy)
+  );
+}
+
+async function ensureEnoughLength(content, { subject, topic, plan, tStart }) {
+  const MAX_EXTRA = 2; // қосымша әрекет саны
+  const MAX_TOTAL_MS = 170000; // жалпы күту шегі
+  let best = content;
+
+  for (let i = 0; i < MAX_EXTRA && isTooShort(best, plan); i++) {
+    if (Date.now() - tStart > MAX_TOTAL_MS) break;
+    const L = limitsFor(plan);
+    const neg = (best.negizgi_bolim || []).reduce((n, b) => n + countWords(b.matin), 0);
+    console.log(
+      `⚠️ Мәтін қысқа (кіріспе ${countWords(best.kirispe)}, негізгі ${neg}, қорытынды ${countWords(best.qorytyndy)}). Қайта сұраймын (${i + 1}/${MAX_EXTRA})...`
+    );
+    const hint =
+      `\n\nМАҢЫЗДЫ: алдыңғы жауап тым қысқа болды, бет толмай қалды. ` +
+      `Енді сөз санын ДӘЛ орында: Кіріспе кемінде ${plan.kirispe} сөз, ` +
+      `Негізгі бөлім барлығы кемінде ${plan.negizgi} сөз (барлық тақырыпшаларға тең бөліп), ` +
+      `Қорытынды кемінде ${plan.qorytyndy} сөз. Әр абзацты толық, егжей-тегжейлі жазыңыз. ` +
+      `Жауап тек бұрынғы JSON форматында болсын.`;
+    try {
+      const retry = await callGemini({ subject: subject || "Пән", topic, plan, hint });
+      if (totalWords(retry) > totalWords(best)) best = retry;
+    } catch (e) {
+      console.error("Қайта сұрау сәтсіз:", e.message);
+      break; // бар нұсқамен жалғастырамыз
+    }
+  }
+  return best;
+}
+
 app.post("/api/generate", async (req, res) => {
   try {
     // Алдымен кіру құқығын тексереміз
@@ -485,6 +522,11 @@ app.post("/api/generate", async (req, res) => {
 
     const tGemini = Date.now();
     console.log(`⏱ Gemini жауабы: ${((tGemini - tStart) / 1000).toFixed(1)} с`);
+
+    // Нейросеть кейде мәтінді қысқа жазады (бет толмай қалады).
+    // Ондай жағдайда көлемін нақты көрсетіп, 2 реттен артық емес қайта сұраймыз
+    // және ең толық нұсқаны аламыз.
+    content = await ensureEnoughLength(content, { subject, topic, plan, tStart });
 
     // Тым ұзын болса — толық сөйлемдермен қысқартамыз
     content = fitContent(content, plan);
