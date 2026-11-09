@@ -19,7 +19,7 @@ const SUBSCRIPTIONS = [
   { email: "bqbaqlet@gmail.com", expires: null }, // мерзімсіз — өзіңізге/әкімшіге
 
   { email: "seilbekumit@gmail.com", expires: "2026-11-15" },
-  { email: "ersultanazimhann@gmail.com", expires: "2026-11-15" },
+  { email: "ersultanazimhann@gmail.com", expires: null },
   { email: "aibekamangeldi21@gmail.com", expires: "2026-11-15" },
   { email: "Mukhamedali125@gmail.com", expires: "2026-11-15" },
   { email: "sariphansezim@gmail.com", expires: "2026-11-15" },
