@@ -29,7 +29,7 @@ const SUBSCRIPTIONS = [
   { email: "asylzhan.doshanuly@gmail.com", expires: "2026-11-15" },
   { email: "nusanbajn409@gmail.com", expires: "2026-12-15" },
   { email: "e58334804@gmail.com", expires: "2026-11-15" },
-  { email: "test12@gmail.com", expires: "2026-11-15" },
+  { email: "sejilbekumit@gmail.com", expires: "2026-11-15" },
   { email: "test13@gmail.com", expires: "2026-11-15" },
   { email: "test14@gmail.com", expires: "2026-11-15" },
   { email: "test15@gmail.com", expires: "2026-11-15" },
