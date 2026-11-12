@@ -45,7 +45,7 @@ const MODELS = (process.env.GEMINI_MODELS || "gemini-3.8-flash,gemini-3.7-flash"
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
-const COLLEGE_NAME = "ЖОҒАРЫ ТАРАЗ ИННОВАЦИЯЛЫҚ КӨПСАЛАЛЫ КОЛЛЕДЖІ";
+const COLLEGE_NAME = "ЖОҒАРҒЫ ТАРАЗ ИННОВАЦИЯЛЫҚ КӨПСАЛАЛЫ КОЛЛЕДЖІ";
 const GOOGLE_CLIENT_ID =
   "1056990394829-p54m601t1j6p63r1fqfh9i3hv0q042ht.apps.googleusercontent.com";
 
@@ -241,7 +241,7 @@ async function requestModel(model, apiKey, prompt) {
   }
 }
 
-async function callGemini({ subject, topic, plan, hint = "" }) {
+async function callGemini({ subject, topic, plan, hint = "", skipGemini = false }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -261,7 +261,8 @@ async function callGemini({ subject, topic, plan, hint = "" }) {
   const now = Date.now();
   const healthy = MODELS.filter((mdl) => !(cooldownUntil[mdl] > now));
   const cooling = MODELS.filter((mdl) => cooldownUntil[mdl] > now);
-  const order = [...healthy, ...cooling];
+  // skipGemini: қайта сұраған кезде Gemini толып тұрса, бірден Groq-қа өтеміз
+  const order = skipGemini ? [] : [...healthy, ...cooling];
   if (cooling.length) {
     console.log(`Кезекте кейінге қалды (жақында өтпеген): ${cooling.join(", ")}`);
   }
@@ -352,7 +353,7 @@ async function callGemini({ subject, topic, plan, hint = "" }) {
   }
 
   if (!okResult) {
-    const { model, status, msg } = lastFail;
+    const { model, status, msg } = lastFail || { model: "-", status: "network", msg: "жауап жоқ" };
     if (status === 429) {
       throw new Error(`Gemini лимиті таусылды (429, ${model}). Google айтуы: ${msg}`);
     }
@@ -389,7 +390,10 @@ async function callGemini({ subject, topic, plan, hint = "" }) {
     }
   }
 
-  return extractJson(text);
+  const parsed = extractJson(text);
+  // Жауап Gemini-дан емес, қосалқы қызметтен (Groq/OpenRouter) келгенін белгілеп қоямыз
+  Object.defineProperty(parsed, "_fallback", { value: okResult.provider === "groq", enumerable: false });
+  return parsed;
 }
 
 // Google арқылы кіргеннен кейін бірден рұқсатты тексереді
@@ -482,7 +486,8 @@ async function ensureEnoughLength(content, { subject, topic, plan, tStart }) {
       `Қорытынды кемінде ${plan.qorytyndy} сөз. Әр абзацты толық, егжей-тегжейлі жазыңыз. ` +
       `Жауап тек бұрынғы JSON форматында болсын.`;
     try {
-      const retry = await callGemini({ subject: subject || "Пән", topic, plan, hint });
+      // Алдыңғы жауап Groq-тан келсе, Gemini-ге қайта бармаймыз (ол толып тұр, 1-2 минут жоғалады)
+      const retry = await callGemini({ subject: subject || "Пән", topic, plan, hint, skipGemini: !!best._fallback });
       if (totalWords(retry) > totalWords(best)) best = retry;
     } catch (e) {
       console.error("Қайта сұрау сәтсіз:", e.message);
