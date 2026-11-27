@@ -34,12 +34,19 @@ function recordGeneration(email, topic) {
 
 // Бірінші модель — негізгі, келесілері — қосалқы (негізгісі жүктелген болса ауысады).
 // Керек болса Render-де GEMINI_MODELS айнымалысымен өзгертуге болады: "модель1,модель2"
-const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+// Groq модельдері кезекпен: әр модельдің күндік шегі бөлек, біреуі таусылса келесісіне өтеміз.
+// (GROQ_MODELS немесе ескі GROQ_MODEL айнымалысы арқылы өзгертуге болады)
+const GROQ_MODELS = (
+  process.env.GROQ_MODELS || process.env.GROQ_MODEL || "openai/gpt-oss-120b,openai/gpt-oss-20b"
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 // OpenRouter — Groq-тан кейінгі, толығымен басқа компаниядан (Google-ға да,
 // Groq-қа да қатысы жоқ) соңғы қосалқы. meta-llama Kazakh тілінде
 // gpt-oss-ке қарағанда "ойлау" мәселесі жоқ, тұрақтырақ жауап береді.
 const OPENROUTER_MODEL =
-  process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free";
+  process.env.OPENROUTER_MODEL || "openrouter/free"; // тегін модельдердің ішінен өзі таңдайды
 
 const MODELS = (process.env.GEMINI_MODELS || "gemini-3.8-flash,gemini-3.7-flash")
   .split(",")
@@ -162,7 +169,7 @@ async function requestOpenRouter(prompt) {
   }
 }
 
-async function requestGroq(prompt) {
+async function requestGroq(prompt, model) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return { ok: false, status: "no-key", raw: "GROQ_API_KEY орнатылмаған", ms: 0 };
 
@@ -178,7 +185,7 @@ async function requestGroq(prompt) {
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model,
         temperature: 0.7,
         max_tokens: 12000, // ойлауға + жауапқа жеткілікті қор
         // gpt-oss модельдері әдепкі бойынша токен қорын "ойлауға" жұмсап,
@@ -318,24 +325,24 @@ async function callGemini({ subject, topic, plan, hint = "", skipGemini = false 
     break;
   }
 
-  // Barлық Gemini модельдері өтпесе, соңғы амал ретінде Groq-қа сұраймыз
-  // (Groq біздің соңғы мүмкіндігіміз болғандықтан, бір рет қайталап көреміз)
+  // Барлық Gemini модельдері өтпесе, соңғы амал ретінде Groq-қа сұраймыз.
+  // Күндік шегі (429) таусылса — қайталамай, бірден келесі Groq моделіне өтеміз.
   if (!okResult) {
-    for (let i = 0; i < 2; i++) {
-      console.log(
-        i === 0
-          ? `Барлық Gemini модельдері өтпеді, Groq-қа (${GROQ_MODEL}) ауысамын...`
-          : `Groq қайта көреді...`
-      );
-      const g = await requestGroq(prompt);
-      console.log(`⏱ groq/${GROQ_MODEL}: ${g.status} — ${(g.ms / 1000).toFixed(1)} с`);
+    console.log(`Барлық Gemini модельдері өтпеді, Groq-қа (${GROQ_MODELS.join(", ")}) ауысамын...`);
+    outer: for (const gm of GROQ_MODELS) {
+      for (let i = 0; i < 2; i++) {
+        if (i > 0) console.log(`Groq қайта көреді (${gm})...`);
+        const g = await requestGroq(prompt, gm);
+        console.log(`⏱ groq/${gm}: ${g.status} — ${(g.ms / 1000).toFixed(1)} с`);
 
-      if (g.ok) {
-        okResult = { model: `groq/${GROQ_MODEL}`, raw: g.raw, provider: "groq" };
-        break;
+        if (g.ok) {
+          okResult = { model: `groq/${gm}`, raw: g.raw, provider: "groq" };
+          break outer;
+        }
+        if (g.status === "no-key") break outer; // ключ жоқ болса, қайталаудың мәні жоқ
+        console.error(`groq/${gm}: ${g.status}: ${String(g.raw).slice(0, 300)}`);
+        if (g.status === 429) break; // шек таусылды: осы модельді қайталаудың керегі жоқ
       }
-      if (g.status === "no-key") break; // ключ жоқ болса, қайталаудың мәні жоқ
-      console.error(`groq/${GROQ_MODEL}: ${g.status}: ${String(g.raw).slice(0, 300)}`);
     }
   }
 
@@ -472,7 +479,8 @@ async function ensureEnoughLength(content, { subject, topic, plan, tStart }) {
   const MAX_TOTAL_MS = 170000; // жалпы күту шегі
   let best = content;
 
-  for (let i = 0; i < MAX_EXTRA && isTooShort(best, plan); i++) {
+  // Қосалқы қызмет (Groq) жауабы болса — тек 1 қайта сұрау: оның күндік токен шегі шектеулі
+  for (let i = 0; i < (best._fallback ? 1 : MAX_EXTRA) && isTooShort(best, plan); i++) {
     if (Date.now() - tStart > MAX_TOTAL_MS) break;
     const L = limitsFor(plan);
     const neg = (best.negizgi_bolim || []).reduce((n, b) => n + countWords(b.matin), 0);
